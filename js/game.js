@@ -13,111 +13,6 @@ window.requestAnimFrame = (function(){
     };
 })();
 
-// indexOf for IE. From: https://developer.mozilla.org/En/Core_JavaScript_1.5_Reference:Objects:Array:indexOf
-if (!Array.prototype.indexOf) {
-	Array.prototype.indexOf = function(elt /*, from*/) {
-		var len = this.length;
-		var from = Number(arguments[1]) || 0;
-		from = (from < 0) ? Math.ceil(from) : Math.floor(from);
-		if (from < 0)
-			from += len;
-		for (; from < len; from++) {
-			if (from in this && this[from] === elt)
-				return from;
-		}
-		return -1;
-	};
-}
-
-
-var itemTypes = [
-	{ img : "assets/images/tablechairs.png", block : true },	// 0
-	{ img : "assets/images/armor.png", block : true },		// 1
-	{ img : "assets/images/plantgreen.png", block : true },	// 2
-	{ img : "assets/images/lamp.png", block : false }		// 3
-];
-
-var mapItems = [
-
-	// lamps in center area
-	{type:3, x:10, y:7},
-	{type:3, x:15, y:7},
-
-	// lamps in bottom corridor
-	{type:3, x:5, y:22},
-	{type:3, x:12, y:22},
-	{type:3, x:19, y:22},
-
-	// tables in long bottom room
-	{type:0, x:10, y:18},
-	{type:0, x:15, y:18},
-	// lamps in long bottom room
-	{type:3, x:8, y:18},
-	{type:3, x:17, y:18}
-];
-
-
-var enemyTypes = [
-	{ img : "assets/images/guard.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 }
-];
-
-var mapEnemies = [
-	{type : 0, x : 17.5, y : 4.5},
-	{type : 0, x : 25.5, y : 16.5}
-];
-
-var player = {
-	x : 10.5,		// current x, y position
-	y : 6.5,
-	dir : 0,		// the direction that the player is turning, either -1 for left or 1 for right.
-	rotDeg : 0,		// the current angle of rotation 
-	rot : 0,		// rotation in radians
-	speed : 0,		// is the playing moving forward (speed = 1) or backwards (speed = -1).
-	moveSpeed : 0.10,	// how far (in map units) does the player move each step/update
-	rotSpeed : 3		// how much does the player rotate each step/update (in degrees)
-}
-
-var mapWidth = 0;
-var mapHeight = 0;
-
-var miniMapScale = 8;
-
-var screenWidth = 800;
-var screenHeight = 500;
-
-var showOverlay = true;
-
-var stripWidth = 3;
-var fov = 60 * Math.PI / 180;
-
-var numRays = Math.ceil(screenWidth / stripWidth);
-var fovHalf = fov / 2;
-
-var viewDist = (screenWidth/2) / Math.tan((fov / 2));
-
-var twoPI = Math.PI * 2;
-
-var numTextures = 4;
-var wallTextures = [
-	"assets/images/walls_1.png",
-	"assets/images/walls_2.png",
-	"assets/images/walls_3.png",
-	"assets/images/walls_4.png"
-];
-
-var userAgent = navigator.userAgent.toLowerCase();
-var isGecko = userAgent.indexOf("gecko") != -1 && userAgent.indexOf("safari") == -1;
-
-// enable this to use a single image file containing all wall textures. This performs better in Firefox. Opera likes smaller images.
-var useSingleTexture = isGecko;
-
-
-var screenStrips = [];
-var overlay;
-
-var fps = 0;
-var overlayText = "";
-
 function init() {
 
 	mapWidth = map[0].length;
@@ -131,6 +26,7 @@ function init() {
 
 	initEnemies();
 
+	initWeapon();
 
 	gameCycle();
 	renderCycle();
@@ -138,7 +34,21 @@ function init() {
     drawDashboard();
 }
 
-var enemies = [];
+function initWeapon(){
+	var screen = $("screen");
+	weapon = dc("img");
+	weapon.src = weaponStates.img;
+	weapon.onload = function (e)
+	{	
+    weapon.style.position = 'relative';
+	//weapon.style.left = '510px;';
+	//weapon.style.display = "block";
+	//weapon.style ="position: absolute;object-fit: cover; left: 350px;top: 350px;border: 5px solid black;";
+	weapon.style = "width: 400px; height: 200px; object-fit: cover;object-position: 100% 10%; border: 5px solid black;";
+	console.log(weapon);
+	screen.appendChild(weapon);
+	}
+}
 
 function initEnemies() {
 	var screen = $("screen");
@@ -156,6 +66,7 @@ function initEnemies() {
 		enemy.rotDeg = 0;
 		enemy.dir = 0;
 		enemy.speed = 0;
+		enemy.shooting = false;
 		enemy.moveSpeed = type.moveSpeed;
 		enemy.rotSpeed = type.rotSpeed;
 		enemy.totalStates = type.totalStates;
@@ -177,10 +88,6 @@ function initEnemies() {
 	}
 }
 
-
-var spriteMap;
-var visibleSprites = [];
-var oldVisibleSprites = [];
 
 function initSprites() {
 	spriteMap = [];
@@ -250,7 +157,7 @@ function ai(timeDelta) {
 			enemy.rotDeg = angle * 180 / Math.PI;
 			enemy.rot = angle;
 			enemy.speed = 1;
-
+			enemy.shooting = false;
 			var walkCycleTime = 1000;
 			var numWalkSprites = 4;
 
@@ -259,6 +166,7 @@ function ai(timeDelta) {
 		} else {
 			enemy.state = 0;
 			enemy.speed = 0;
+			enemy.shooting = true;
 		}
 
 		move(enemies[i], timeDelta);
@@ -279,6 +187,8 @@ function renderCycle() {
 
 	renderEnemies();
 
+	renderWeapon();
+
 	// time since last rendering
 	var now = new Date().getTime();
 	var timeDelta = now - lastRenderCycleTime;
@@ -288,12 +198,13 @@ function renderCycle() {
 	}
 	lastRenderCycleTime = now;
 	setTimeout(renderCycle, cycleDelay);
-
+	updateDashboard();
 	fps = 1000 / timeDelta;
-	if (showOverlay) {
-		updateOverlay();
+	if (showInfo) {
+		updateInfo();
 	}
 }
+
 function clearSprites() {
 	// clear the visible sprites array but keep a copy in oldVisibleSprites for later.
 	// also mark all the sprites as not visible so they can be added to visibleSprites again during raycasting.
@@ -304,6 +215,12 @@ function clearSprites() {
 		sprite.visible = false;
 	}
 	visibleSprites = [];
+}
+
+function renderWeapon(){
+	//weapon.style.left= weaponStates.left;
+	//weapon.style.top = weaponStates.top;
+
 }
 
 function renderSprites() {
@@ -331,10 +248,10 @@ function renderSprites() {
 		// x-position on screen
 		var x = Math.tan(spriteAngle) * viewDist;
 
-		img.style.left = (screenWidth/2 + x - size/2) + "px";
+		img.style.left = (SCREENWIDTH/2 + x - size/2) + "px";
 
 		// y is constant since we keep all sprites at the same height and vertical position
-		img.style.top = ((screenHeight-size)/2)+"px";
+		img.style.top = ((SCREENHEIGHT-size)/2)+"px";
 
 		img.style.width = size + "px";
 		img.style.height =  size + "px";
@@ -355,6 +272,7 @@ function renderSprites() {
 	}
 
 }
+
 function renderEnemies() {
 
 	for (var i=0;i<enemies.length;i++) {
@@ -396,14 +314,14 @@ function renderEnemies() {
 			}
 
 			// top position is halfway down the screen, minus half the sprite height
-			var styleTop = ((screenHeight-size)/2);
+			var styleTop = ((SCREENHEIGHT-size)/2);
 			if (styleTop != oldStyles.top) {
 				style.top = styleTop + "px";
 				oldStyles.top = styleTop;
 			}
 
 			// place at x position, adjusted for sprite size and the current sprite state
-			var styleLeft = (screenWidth/2 + x - size/2 - size*enemy.state);
+			var styleLeft = (SCREENWIDTH/2 + x - size/2 - size*enemy.state);
 			if (styleLeft != oldStyles.left) {
 				style.left = styleLeft + "px";
 				oldStyles.left = styleLeft;
@@ -436,22 +354,41 @@ function renderEnemies() {
 	}
 }
 
-function updateOverlay() {
-	overlay.innerHTML = "FPS: " + fps.toFixed(1) + "<br/>" + overlayText;
-	overlayText = "";
+function updateInfo() {
+	var debugText = "FPS: " + fps.toFixed(1) + "<br/>"+
+	"playerX: "+ Math.floor(player.x) + "<br/>" +
+	"playerY: "+ Math.floor(player.y) + "<br/>";
+	info.innerHTML = debugText;
+	infoText = "";
+}
+
+function updateDashboard(){
+
 }
 
 function drawDashboard(){
-	var dash = dc("img");
+	dashboard = $("dashboard");
+	var ctx = dashboard.getContext('2d');
+	var dash = new Image();
 	dash.src = 'assets/images/dashboard.png';
-
+	dash.onload = function (e)
+	{
+        ctx.drawImage(dash, 0, 0);
+		ctx.fillStyle = "white";
+		ctx.font = "32px Arial";
+		ctx.fillText(stats.floor, 20, 55);
+		ctx.fillText(stats.score, 100, 55);
+		ctx.fillText(stats.lives, 170, 55);
+		ctx.fillText(stats.health, 260, 55);
+		ctx.fillText(stats.ammo, 345, 55);
+	}  
 }
 
 function initScreen() {
 
 	var screen = $("screen");
 
-	for (var i=0;i<screenWidth;i+=stripWidth) {
+	for (var i=0;i<SCREENWIDTH;i+=stripWidth) {
 		var strip = dc("img");
 		strip.style.position = "absolute";
 		strip.style.height = "0px";
@@ -474,304 +411,12 @@ function initScreen() {
 		screen.appendChild(strip);
 	}
 
-	// overlay div for adding text like fps count, etc.
-	overlay = dc("div");
-	overlay.id = "overlay";
-	overlay.style.display = showOverlay ? "block" : "none";
-	screen.appendChild(overlay);
+	// info div for adding text like fps count, etc.
+	info = dc("div");
+	info.id = "info";
+	info.style.display = showInfo ? "block" : "none";
+	screen.appendChild(info);
 
-}
-
-// bind keyboard events to game functions (movement, etc)
-function bindKeys() {
-
-	document.onkeydown = function(e) {
-		e = e || window.event;
-
-		switch (e.keyCode) { // which key was pressed?
-
-			case 38: // up, move player forward, ie. increase speed
-				player.speed = 1;
-				break;
-
-			case 40: // down, move player backward, set negative speed
-				player.speed = -1;
-				break;
-
-			case 37: // left, rotate player left
-				player.dir = -1;
-				break;
-
-			case 39: // right, rotate player right
-				player.dir = 1;
-				break;
-		}
-	}
-
-	document.onkeyup = function(e) {
-		e = e || window.event;
-
-		switch (e.keyCode) {
-			case 38:
-			case 40:
-				player.speed = 0;	// stop the player movement when up/down key is released
-				break;
-			case 37:
-			case 39:
-				player.dir = 0;
-				break;
-		}
-	}
-}
-
-
-function castRays() {
-	var stripIdx = 0;
-
-	for (var i=0;i<numRays;i++) {
-		// where on the screen does ray go through?
-		var rayScreenPos = (-numRays/2 + i) * stripWidth;
-
-		// the distance from the viewer to the point on the screen, simply Pythagoras.
-		var rayViewDist = Math.sqrt(rayScreenPos*rayScreenPos + viewDist*viewDist);
-
-		// the angle of the ray, relative to the viewing direction.
-		// right triangle: a = sin(A) * c
-		var rayAngle = Math.asin(rayScreenPos / rayViewDist);
-
-		castSingleRay(
-			player.rot + rayAngle, 	// add the players viewing direction to get the angle in world space
-			stripIdx++
-		);
-	}
-}
-
-function castSingleRay(rayAngle, stripIdx) {
-
-	// first make sure the angle is between 0 and 360 degrees
-	rayAngle %= twoPI;
-	if (rayAngle < 0) rayAngle += twoPI;
-
-	// moving right/left? up/down? Determined by which quadrant the angle is in.
-	var right = (rayAngle > twoPI * 0.75 || rayAngle < twoPI * 0.25);
-	var up = (rayAngle < 0 || rayAngle > Math.PI);
-
-	var wallType = 0;
-
-	// only do these once
-	var angleSin = Math.sin(rayAngle);
-	var angleCos = Math.cos(rayAngle);
-
-	var dist = 0;	// the distance to the block we hit
-	var xHit = 0; 	// the x and y coord of where the ray hit the block
-	var yHit = 0;
-	var xWallHit = 0;
-	var yWallHit = 0;
-
-	var textureX;	// the x-coord on the texture of the block, ie. what part of the texture are we going to render
-	var wallX;	// the (x,y) map coords of the block
-	var wallY;
-
-	var wallIsShaded = false;
-
-	var wallIsHorizontal = false;
-
-	// first check against the vertical map/wall lines
-	// we do this by moving to the right or left edge of the block we're standing in
-	// and then moving in 1 map unit steps horizontally. The amount we have to move vertically
-	// is determined by the slope of the ray, which is simply defined as sin(angle) / cos(angle).
-
-	var slope = angleSin / angleCos; 	// the slope of the straight line made by the ray
-	var dXVer = right ? 1 : -1; 	// we move either 1 map unit to the left or right
-	var dYVer = dXVer * slope; 	// how much to move up or down
-
-	var x = right ? Math.ceil(player.x) : Math.floor(player.x);	// starting horizontal position, at one of the edges of the current map block
-	var y = player.y + (x - player.x) * slope;			// starting vertical position. We add the small horizontal step we just made, multiplied by the slope.
-
-	while (x >= 0 && x < mapWidth && y >= 0 && y < mapHeight) {
-		var wallX = (x + (right ? 0 : -1))>>0;
-		var wallY = (y)>>0;
-
-		if (spriteMap[wallY][wallX] && !spriteMap[wallY][wallX].visible) {
-			spriteMap[wallY][wallX].visible = true;
-			visibleSprites.push(spriteMap[wallY][wallX]);
-		}
-
-		// is this point inside a wall block?
-		if (map[wallY][wallX] > 0) {
-
-			var distX = x - player.x;
-			var distY = y - player.y;
-			dist = distX*distX + distY*distY;	// the distance from the player to this point, squared.
-
-			wallType = map[wallY][wallX]; // we'll remember the type of wall we hit for later
-			textureX = y % 1;	// where exactly are we on the wall? textureX is the x coordinate on the texture that we'll use later when texturing the wall.
-			if (!right) textureX = 1 - textureX; // if we're looking to the left side of the map, the texture should be reversed
-
-			xHit = x;	// save the coordinates of the hit. We only really use these to draw the rays on minimap.
-			yHit = y;
-			xWallHit = wallX;
-			yWallHit = wallY;
-
-			// make horizontal walls shaded
-			wallIsShaded = true;
-
-			wallIsHorizontal = true;
-
-			break;
-		}
-		x = x + dXVer;
-		y = y + dYVer;
-	}
-
-	// now check against horizontal lines. It's basically the same, just "turned around".
-	// the only difference here is that once we hit a map block, 
-	// we check if there we also found one in the earlier, vertical run. We'll know that if dist != 0.
-	// If so, we only register this hit if this distance is smaller.
-
-	var slope = angleCos / angleSin;
-	var dYHor = up ? -1 : 1;
-	var dXHor = dYHor * slope;
-	var y = up ? Math.floor(player.y) : Math.ceil(player.y);
-	var x = player.x + (y - player.y) * slope;
-
-	while (x >= 0 && x < mapWidth && y >= 0 && y < mapHeight) {
-		var wallY = (y + (up ? -1 : 0))>>0;
-		var wallX = (x)>>0;
-
-		if (spriteMap[wallY][wallX] && !spriteMap[wallY][wallX].visible) {
-			spriteMap[wallY][wallX].visible = true;
-			visibleSprites.push(spriteMap[wallY][wallX]);
-		}
-
-		if (map[wallY][wallX] > 0) {
-			var distX = x - player.x;
-			var distY = y - player.y;
-			var blockDist = distX*distX + distY*distY;
-			if (!dist || blockDist < dist) {
-				dist = blockDist;
-				xHit = x;
-				yHit = y;
-				xWallHit = wallX;
-				yWallHit = wallY;
-
-				wallType = map[wallY][wallX];
-				textureX = x % 1;
-				if (up) textureX = 1 - textureX;
-
-				wallIsShaded = false;
-			}
-			break;
-		}
-		x = x + dXHor;
-		y = y + dYHor;
-	}
-
-	if (dist) {
-		//drawRay(xHit, yHit);
-
-		var strip = screenStrips[stripIdx];
-
-		dist = Math.sqrt(dist);
-
-		// use perpendicular distance to adjust for fish eye
-		// distorted_dist = correct_dist / cos(relative_angle_of_ray)
-		dist = dist * Math.cos(player.rot - rayAngle);
-
-		// now calc the position, height and width of the wall strip
-
-		// "real" wall height in the game world is 1 unit, the distance from the player to the screen is viewDist,
-		// thus the height on the screen is equal to wall_height_real * viewDist / dist
-
-		var height = Math.round(viewDist / dist);
-
-		// width is the same, but we have to stretch the texture to a factor of stripWidth to make it fill the strip correctly
-		var width = height * stripWidth;
-
-		// top placement is easy since everything is centered on the x-axis, so we simply move
-		// it half way down the screen and then half the wall height back up.
-		var top = Math.round((screenHeight - height) / 2);
-
-		var imgTop = 0;
-
-		var style = strip.style;
-		var oldStyles = strip.oldStyles;
-
-		var styleHeight;
-		if (useSingleTexture) {
-			// then adjust the top placement according to which wall texture we need
-			imgTop = (height * (wallType-1))>>0;
-			var styleHeight = (height * numTextures)>>0;
-		} else {
-			var styleSrc = wallTextures[wallType-1];
-			if (oldStyles.src != styleSrc) {
-				strip.src = styleSrc;
-				oldStyles.src = styleSrc
-			}
-			var styleHeight = height;
-		}
-
-		if (oldStyles.height != styleHeight) {
-			style.height = styleHeight + "px";
-			oldStyles.height = styleHeight
-		}
-
-		var texX = Math.round(textureX*width);
-		if (texX > width - stripWidth)
-			texX = width - stripWidth;
-		texX += (wallIsShaded ? width : 0);
-
-		var styleWidth = (width*2)>>0;
-		if (oldStyles.width != styleWidth) {
-			style.width = styleWidth +"px";
-			oldStyles.width = styleWidth;
-		}
-
-		var styleTop = top - imgTop;
-		if (oldStyles.top != styleTop) {
-			style.top = styleTop + "px";
-			oldStyles.top = styleTop;
-		}
-
-		var styleLeft = stripIdx*stripWidth - texX;
-		if (oldStyles.left != styleLeft) {
-			style.left = styleLeft + "px";
-			oldStyles.left = styleLeft;
-		}
-
-		var styleClip = "rect(" + imgTop + ", " + (texX + stripWidth)  + ", " + (imgTop + height) + ", " + texX + ")";
-		if (oldStyles.clip != styleClip) {
-			style.clip = styleClip;
-			oldStyles.clip = styleClip;
-		}
-
-		var dwx = xWallHit - player.x;
-		var dwy = yWallHit - player.y;
-		var wallDist = dwx*dwx + dwy*dwy;
-		var styleZIndex = -(wallDist*1000)>>0;
-		if (styleZIndex != oldStyles.zIndex) {
-			strip.style.zIndex = styleZIndex;
-			oldStyles.zIndex = styleZIndex;
-		}
-
-	}
-
-}
-
-function drawRay(rayX, rayY) {
-	var miniMapObjects = $("minimapobjects");
-	var objectCtx = miniMapObjects.getContext("2d");
-
-	objectCtx.strokeStyle = "rgba(0,100,0,0.3)";
-	objectCtx.lineWidth = 0.5;
-	objectCtx.beginPath();
-	objectCtx.moveTo(player.x * miniMapScale, player.y * miniMapScale);
-	objectCtx.lineTo(
-		rayX * miniMapScale,
-		rayY * miniMapScale
-	);
-	objectCtx.closePath();
-	objectCtx.stroke();
 }
 
 function move(entity, timeDelta) {
@@ -998,5 +643,8 @@ function drawMiniMap() {
 	updateMiniMap();
 }
 
+function fireWeapon(){
+
+}
 //setTimeout(init, 1);
 window.onload = init;

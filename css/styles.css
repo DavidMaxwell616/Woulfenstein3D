@@ -6,14 +6,25 @@ canvas#minimapobjects {
  position : absolute;
 }
 
-div#overlay {
+canvas#dashboard { 
+    padding: 0;
+    margin: auto;
+    display: block;
+    position: absolute;
+    top: 512;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+div#info {
  position : absolute;
- width : 310px;
- height : 190px;
+ width : 800px;
+ height : 200px;
  padding : 5px;
  color : white;
  font-family : lucida console, courier new;
- font-size : 10px;
+ font-size : 24px;
  z-index : 100000001;
 }
 
