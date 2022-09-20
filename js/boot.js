@@ -5,12 +5,13 @@ var itemTypes = [
 	{ img : "assets/images/tablechairs.png", block : true },	// 0
 	{ img : "assets/images/armor.png", block : true },		// 1
 	{ img : "assets/images/plantgreen.png", block : true },	// 2
-	{ img : "assets/images/lamp.png", block : false }		// 3
+	{ img : "assets/images/lamp.png", block : false },		// 3
+	{ img : "assets/images/door.png", block : false }		// 4
 ];
 
 var mapItems = [
 
-	// lamps in center area
+    // lamps in center area
 	{type:3, x:10, y:7},
 	{type:3, x:15, y:7},
 
@@ -27,7 +28,10 @@ var mapItems = [
 	{type:3, x:17, y:18}
 ];
 
-
+var cycleTime = 1000;
+var walkFrames = [1,2,3,4];
+var dieFrames = [5,6,7,8];
+var shootingFrames = [11,12]
 var enemyTypes = [
 	{ img : "assets/images/guard.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 }
 ];
@@ -42,8 +46,8 @@ var mapEnemies = [
 ];
 
 var player = {
-	x : 26.5,		// current x, y position
-	y : 45.5,
+	x : 28.5,		// current x, y position
+	y : 50.5,
 	dir : 0,		// the direction that the player is turning, either -1 for left or 1 for right.
 	rotDeg : 0,		// the current angle of rotation 
 	rot : 0,		// rotation in radians
@@ -55,12 +59,12 @@ var player = {
 var mapWidth = 0;
 var mapHeight = 0;
 
-var miniMapScale = 8;
+var miniMapScale = 4;
 
 var showInfo = true;
 
 var stripWidth = 3;
-var fov = 60 * Math.PI / 180;
+var fov = 90 * Math.PI / 180;
 
 var numRays = Math.ceil(SCREENWIDTH / stripWidth);
 var fovHalf = fov / 2;
@@ -69,12 +73,14 @@ var viewDist = (SCREENWIDTH/2) / Math.tan((fov / 2));
 
 var twoPI = Math.PI * 2;
 
-var numTextures = 4;
 var wallTextures = [
 	"assets/images/walls_1.png",
 	"assets/images/walls_2.png",
 	"assets/images/walls_3.png",
-	"assets/images/walls_4.png"
+	"assets/images/walls_4.png",
+    "assets/images/walls_5.png",
+    "assets/images/walls_6.png",
+    "assets/images/walls_7.png"
 ];
 
 var userAgent = navigator.userAgent.toLowerCase();
@@ -86,7 +92,6 @@ var useSingleTexture = isGecko;
 var screenStrips = [];
 var info;
 var weapon;
-
 var fps = 0;
 var infoText = "";
 

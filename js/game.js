@@ -35,19 +35,14 @@ function init() {
 }
 
 function initWeapon(){
-	var screen = $("screen");
-	weapon = dc("img");
-	weapon.src = weaponStates.img;
+	var canvas = $("weapon");
+	var ctx = canvas.getContext('2d');
+	weapon = new Image();
+	weapon.src = 'assets/images/weapon.png';
 	weapon.onload = function (e)
-	{	
-    weapon.style.position = 'relative';
-	//weapon.style.left = '510px;';
-	//weapon.style.display = "block";
-	//weapon.style ="position: absolute;object-fit: cover; left: 350px;top: 350px;border: 5px solid black;";
-	weapon.style = "width: 400px; height: 200px; object-fit: cover;object-position: 100% 10%; border: 5px solid black;";
-	console.log(weapon);
-	screen.appendChild(weapon);
-	}
+	{
+	    ctx.drawImage(weapon, 0, 0, 64, 64, 0,0,128, 128);
+	}  
 }
 
 function initEnemies() {
@@ -66,7 +61,6 @@ function initEnemies() {
 		enemy.rotDeg = 0;
 		enemy.dir = 0;
 		enemy.speed = 0;
-		enemy.shooting = false;
 		enemy.moveSpeed = type.moveSpeed;
 		enemy.rotSpeed = type.rotSpeed;
 		enemy.totalStates = type.totalStates;
@@ -157,16 +151,14 @@ function ai(timeDelta) {
 			enemy.rotDeg = angle * 180 / Math.PI;
 			enemy.rot = angle;
 			enemy.speed = 1;
-			enemy.shooting = false;
-			var walkCycleTime = 1000;
-			var numWalkSprites = 4;
-
-			enemy.state = Math.floor((new Date() % walkCycleTime) / (walkCycleTime / numWalkSprites)) + 1;
-
-		} else {
-			enemy.state = 0;
+			var frame = Math.floor((new Date() % cycleTime) / (cycleTime / walkFrames.length)) + walkFrames[0];
+			enemy.state = frame;
+		} 
+		else 
+		{
 			enemy.speed = 0;
-			enemy.shooting = true;
+			var frame = Math.floor((new Date() % cycleTime) / (cycleTime / shootingFrames.length)) + shootingFrames[0];
+			enemy.state==frame;
 		}
 
 		move(enemies[i], timeDelta);
@@ -192,7 +184,7 @@ function renderCycle() {
 	// time since last rendering
 	var now = new Date().getTime();
 	var timeDelta = now - lastRenderCycleTime;
-	var cycleDelay = 1000 / 30;
+	var cycleDelay = cycleTime / 30;
 	if (timeDelta > cycleDelay) {
 		cycleDelay = Math.max(1, cycleDelay - (timeDelta - cycleDelay))
 	}
@@ -218,9 +210,6 @@ function clearSprites() {
 }
 
 function renderWeapon(){
-	//weapon.style.left= weaponStates.left;
-	//weapon.style.top = weaponStates.top;
-
 }
 
 function renderSprites() {
@@ -382,6 +371,18 @@ function drawDashboard(){
 		ctx.fillText(stats.health, 260, 55);
 		ctx.fillText(stats.ammo, 345, 55);
 	}  
+	var face = new Image();
+	face.src = 'assets/images/face.png';
+	face.onload = function (e)
+	{
+	    ctx.drawImage(face, 0, 0, 25, 31, 208,0,50, 62);
+	}
+	var weaponIcon = new Image();
+	weaponIcon.src = 'assets/images/weapons.png';
+	weaponIcon.onload = function (e)
+	{
+	    ctx.drawImage(weaponIcon, 0, 0, 49, 26, 400,5,100, 52);
+	}
 }
 
 function initScreen() {
@@ -610,7 +611,7 @@ function drawMiniMap() {
 	miniMap.style.height = miniMapObjects.style.height = miniMapCtr.style.height = h;
 
 	var ctx = miniMap.getContext("2d");
-
+	ctx.globalAlpha = 0.2;
 	ctx.fillStyle = "white";
 	ctx.fillRect(0,0,miniMap.width,miniMap.height);
 
