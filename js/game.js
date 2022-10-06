@@ -181,6 +181,7 @@ function renderCycle() {
 
 	renderWeapon();
 
+	updateDashboard();
 	// time since last rendering
 	var now = new Date().getTime();
 	var timeDelta = now - lastRenderCycleTime;
@@ -190,8 +191,10 @@ function renderCycle() {
 	}
 	lastRenderCycleTime = now;
 	setTimeout(renderCycle, cycleDelay);
-	updateDashboard();
 	fps = 1000 / timeDelta;
+	var canvas = $("dashboard");
+	var ctx = canvas.getContext('2d');
+	animateSprite(face,ctx);
 	if (showInfo) {
 		updateInfo();
 	}
@@ -352,8 +355,29 @@ function updateInfo() {
 }
 
 function updateDashboard(){
-
+	dashboard = $("dashboard");
+	var ctx = dashboard.getContext('2d');
+	animateSprite(face,ctx);
 }
+
+function animateSprite(sprite, ctx){
+	if(sprite==null)
+		return;
+	ctx.drawImage(sprite.spritesheet,
+		sprite.frameIndex*sprite.width,
+		sprite.frameIndex*sprite.height,
+		sprite.width,
+		sprite.height,
+		0,
+		0,
+		sprite.width*sprite.scale,
+		sprite.height*sprite.scale); 
+	if(sprite.frameIndex<sprite.endFrame)
+		sprite.frameIndex++;
+	else
+		sprite.frameIndex=sprite.startFrame;
+}
+
 
 function drawDashboard(){
 	dashboard = $("dashboard");
@@ -370,20 +394,16 @@ function drawDashboard(){
 		ctx.fillText(stats.lives, 170, 55);
 		ctx.fillText(stats.health, 260, 55);
 		ctx.fillText(stats.ammo, 345, 55);
-	}  
-	var face = new Image();
-	face.src = 'assets/images/face.png';
-	face.onload = function (e)
-	{
-	    ctx.drawImage(face, 0, 0, 25, 31, 208,0,50, 62);
 	}
-	var weaponIcon = new Image();
-	weaponIcon.src = 'assets/images/weapons.png';
-	weaponIcon.onload = function (e)
-	{
-	    ctx.drawImage(weaponIcon, 0, 0, 49, 26, 400,5,100, 52);
-	}
+	var img = new Image();
+	img.src = 'assets/images/face.png';
+	face = new GameObject(img,0,0,25,31,3,7,21,0,3);
+	face.draw(ctx);
+	img.src = 'assets/images/weapons.png';
+	weaponIcon = new GameObject(img, 0, 0, 49, 26, 400,5,100, 52);
+	weaponIcon.draw(ctx);
 }
+
 
 function initScreen() {
 
@@ -395,9 +415,9 @@ function initScreen() {
 		strip.style.height = "0px";
 		strip.style.left = strip.style.top = "0px";
 
-		if (useSingleTexture) {
-			strip.src = (window.opera ? "walls_19color.png" : "walls.png");
-		}
+		// if (useSingleTexture) {
+		// 	strip.src = (window.opera ? "walls_19color.png" : "walls.png");
+		// }
 
 		strip.oldStyles = {
 			left : 0,
@@ -647,5 +667,5 @@ function drawMiniMap() {
 function fireWeapon(){
 
 }
-//setTimeout(init, 1);
+
 window.onload = init;

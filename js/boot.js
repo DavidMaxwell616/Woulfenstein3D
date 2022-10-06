@@ -37,12 +37,15 @@ var enemyTypes = [
 ];
 
 var weaponStates = 
-	{ img : "assets/images/weapon.png", weaponType : 0, width: 64, height: 64, left: 200, top: 100, firing: false };
+	{ 	img : "assets/images/weapon.png", 
+		weaponType : 0, width: 64, height: 64, 
+		left: 200, top: 100, firing: false 
+	};
 
 
 var mapEnemies = [
-	{type : 0, x : 17.5, y : 4.5},
-	{type : 0, x : 25.5, y : 16.5}
+	{type : 0, x : 33.5, y : 2.5},
+	{type : 0, x : 35.5, y : 16.5}
 ];
 
 var player = {
@@ -109,4 +112,6 @@ var enemies = [];
 var spriteMap;
 var visibleSprites = [];
 var oldVisibleSprites = [];
+var face;
+var weaponIcon;
 
