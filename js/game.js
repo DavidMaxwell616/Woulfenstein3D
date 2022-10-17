@@ -182,19 +182,16 @@ function renderCycle() {
 	renderWeapon();
 
 	updateDashboard();
-	// time since last rendering
+
 	var now = new Date().getTime();
 	var timeDelta = now - lastRenderCycleTime;
 	var cycleDelay = cycleTime / 30;
 	if (timeDelta > cycleDelay) {
-		cycleDelay = Math.max(1, cycleDelay - (timeDelta - cycleDelay))
+	  cycleDelay = Math.max(1, cycleDelay - (timeDelta - cycleDelay))
 	}
 	lastRenderCycleTime = now;
 	setTimeout(renderCycle, cycleDelay);
-	fps = 1000 / timeDelta;
-	var canvas = $("dashboard");
-	var ctx = canvas.getContext('2d');
-	animateSprite(face,ctx);
+	fps = cycleTime / timeDelta;
 	if (showInfo) {
 		updateInfo();
 	}
@@ -362,20 +359,9 @@ function updateDashboard(){
 
 function animateSprite(sprite, ctx){
 	if(sprite==null)
-		return;
-	ctx.drawImage(sprite.spritesheet,
-		sprite.frameIndex*sprite.width,
-		sprite.frameIndex*sprite.height,
-		sprite.width,
-		sprite.height,
-		0,
-		0,
-		sprite.width*sprite.scale,
-		sprite.height*sprite.scale); 
-	if(sprite.frameIndex<sprite.endFrame)
-		sprite.frameIndex++;
-	else
-		sprite.frameIndex=sprite.startFrame;
+	return;
+	sprite.update();
+	sprite.draw(ctx);
 }
 
 
@@ -397,11 +383,18 @@ function drawDashboard(){
 	}
 	var img = new Image();
 	img.src = 'assets/images/face.png';
-	face = new GameObject(img,0,0,25,31,3,7,21,0,3);
-	face.draw(ctx);
-	img.src = 'assets/images/weapons.png';
-	weaponIcon = new GameObject(img, 0, 0, 49, 26, 400,5,100, 52);
-	weaponIcon.draw(ctx);
+	img.onload = function (e)
+	{
+		face = new GameObject(img,208,5,25,31,2,4,7,4,cycleTime,0,4);
+		face.draw(ctx);
+	}
+	var img2 = new Image();
+		img2.src = 'assets/images/weapons.png';
+		img2.onload = function (e)
+	{
+		weaponIcon = new GameObject(img2, 400, 5, 49, 26,2, 4,1,4,cycleTime,0,0);
+		weaponIcon.draw(ctx);
+	}	  
 }
 
 

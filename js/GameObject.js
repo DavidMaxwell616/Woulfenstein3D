@@ -1,4 +1,4 @@
-function GameObject(spritesheet, x, y, width, height, 
+function GameObject(spritesheet, x, y, width, height, scale,
     numberOfColumns, numberOfRows, frameCount, timePerFrame, startFrame, endFrame) {
     this.spritesheet = spritesheet;             //the spritesheet image
     this.x = x;                                 //the x coordinate of the object
@@ -8,7 +8,7 @@ function GameObject(spritesheet, x, y, width, height,
     this.timePerFrame = timePerFrame;           //time in(ms) given to each frame
     this.numberOfColumns = numberOfColumns || 1;  //number of columns in the spritesheet, default 1
     this.numberOfRows = numberOfRows || 1;  //number of rows in the spritesheet, default 1
-    this.scale = 4;
+    this.scale = scale;
     this.row = 0;
     this.startFrame = startFrame;
     this.endFrame = endFrame;
