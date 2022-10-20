@@ -1,13 +1,13 @@
 const SCREENWIDTH = 800;
 const SCREENHEIGHT = 500;
 
-var itemTypes = [
-	{ img : "assets/images/tablechairs.png", block : true },	// 0
-	{ img : "assets/images/armor.png", block : true },		// 1
-	{ img : "assets/images/plantgreen.png", block : true },	// 2
-	{ img : "assets/images/lamp.png", block : false },		// 3
-	{ img : "assets/images/door.png", block : false }		// 4
-];
+// var itemTypes = [
+// 	{ img : "assets/images/tablechairs.png", block : true },	// 0
+// 	{ img : "assets/images/armor.png", block : true },		// 1
+// 	{ img : "assets/images/plantgreen.png", block : true },	// 2
+// 	{ img : "assets/images/lamp.png", block : false },		// 3
+// 	{ img : "assets/images/door.png", block : false }		// 4
+// ];
 
 var mapItems = [
 
@@ -76,15 +76,15 @@ var viewDist = (SCREENWIDTH/2) / Math.tan((fov / 2));
 
 var twoPI = Math.PI * 2;
 
-var wallTextures = [
-	"assets/images/walls_1.png",
-	"assets/images/walls_2.png",
-	"assets/images/walls_3.png",
-	"assets/images/walls_4.png",
-    "assets/images/walls_5.png",
-    "assets/images/walls_6.png",
-    "assets/images/walls_7.png"
-];
+// var wallTextures = [
+// 	"assets/images/walls_1.png",
+// 	"assets/images/walls_2.png",
+// 	"assets/images/walls_3.png",
+// 	"assets/images/walls_4.png",
+//     "assets/images/walls_5.png",
+//     "assets/images/walls_6.png",
+//     "assets/images/walls_7.png"
+// ];
 
 var userAgent = navigator.userAgent.toLowerCase();
 var isGecko = userAgent.indexOf("gecko") != -1 && userAgent.indexOf("safari") == -1;
