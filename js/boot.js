@@ -1,16 +1,17 @@
 const SCREENWIDTH = 800;
 const SCREENHEIGHT = 500;
 
-// var itemTypes = [
-// 	{ img : "assets/images/tablechairs.png", block : true },	// 0
-// 	{ img : "assets/images/armor.png", block : true },		// 1
-// 	{ img : "assets/images/plantgreen.png", block : true },	// 2
-// 	{ img : "assets/images/lamp.png", block : false },		// 3
-// 	{ img : "assets/images/door.png", block : false }		// 4
-// ];
+var objectsPath = "assets/images/objects.png";
+var itemTypes = [
+	{ type: 0, name: "table and chairs", column: 5, row: 1, block : true },
+	{ type: 1, name: "armor", column: 4, row: 4, block : true },
+	{ type: 2, name: "plant", column: 1, row: 3, block : true },
+	{ type: 3, name: "lamp", column: 1, row: 2, block : false },
+	{ type: 4, name: "door", column: 5, row: 1, block : false }
+];
+
 
 var mapItems = [
-
     // lamps in center area
 	{type:3, x:10, y:7},
 	{type:3, x:15, y:7},
@@ -33,7 +34,9 @@ var walkFrames = [1,2,3,4];
 var dieFrames = [5,6,7,8];
 var shootingFrames = [11,12]
 var enemyTypes = [
-	{ img : "assets/images/guard.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 }
+	{ img : "assets/images/guard.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 },
+	{ img : "assets/images/ss.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 },
+	{ img : "assets/images/dog.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 }
 ];
 
 var weaponStates = 
@@ -76,15 +79,13 @@ var viewDist = (SCREENWIDTH/2) / Math.tan((fov / 2));
 
 var twoPI = Math.PI * 2;
 
-// var wallTextures = [
-// 	"assets/images/walls_1.png",
-// 	"assets/images/walls_2.png",
-// 	"assets/images/walls_3.png",
-// 	"assets/images/walls_4.png",
-//     "assets/images/walls_5.png",
-//     "assets/images/walls_6.png",
-//     "assets/images/walls_7.png"
-// ];
+var walls = new Image();
+walls.src = "assets/images/walls.png";
+var wallTextures = [];
+walls.onload = function (e)
+{
+	wallTextures.push(walls.src);
+};
 
 var userAgent = navigator.userAgent.toLowerCase();
 var isGecko = userAgent.indexOf("gecko") != -1 && userAgent.indexOf("safari") == -1;

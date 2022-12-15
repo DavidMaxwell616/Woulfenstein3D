@@ -407,7 +407,7 @@ function initScreen() {
 		strip.style.position = "absolute";
 		strip.style.height = "0px";
 		strip.style.left = strip.style.top = "0px";
-
+		//strip.src = "assets/images/walls.png";
 		// if (useSingleTexture) {
 		// 	strip.src = (window.opera ? "walls_19color.png" : "walls.png");
 		// }
