@@ -401,6 +401,36 @@ function drawDashboard(){
 function initScreen() {
 
 	var screen = $("screen");
+	var walls = new Image();
+	walls.src = "assets/images/walls.png";
+	for (let i = 0; i < 4; i++) {
+		cropImage(walls, i*64, 0, 64, 64);
+		var wallTexture = new Image();
+	
+		var wallTextures = [];
+	
+		walls.onload = function (e)
+		{
+			wallTextures.push(walls.src);
+		};
+	}
+
+	function cropImage(originalImage, newX, newY, newWidth, newHeight) {
+		//initialize the canvas object
+		const canvas = $('wall'); 
+		const ctx = canvas.getContext('2d');
+	 
+		//wait for the image to finish loading
+		originalImage.addEventListener('load', function() {
+	 
+			//set the canvas size to the new width and height
+			canvas.width = newWidth;
+			canvas.height = newHeight;
+			 
+			//draw the image
+			ctx.drawImage(originalImage, newX, newY, newWidth, newHeight, 0, 0, newWidth, newHeight); 
+		});
+	}
 
 	for (var i=0;i<SCREENWIDTH;i+=stripWidth) {
 		var strip = dc("img");
