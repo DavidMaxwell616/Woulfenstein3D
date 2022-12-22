@@ -407,7 +407,7 @@ function initScreen() {
 		cropImage(walls, i*64, 0, 64, 64);
 		var wallTexture = new Image();
 	
-		var wallTextures = [];
+		wallTextures = [];
 	
 		walls.onload = function (e)
 		{

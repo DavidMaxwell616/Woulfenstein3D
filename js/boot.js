@@ -39,7 +39,7 @@ var enemyTypes = [
 	{ img : "assets/images/ss.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 },
 	{ img : "assets/images/dog.png", moveSpeed : 0.05, rotSpeed : 3, totalStates : 13 }
 ];
-
+var wallTextures = [];
 var weaponStates = 
 	{ 	img : "assets/images/weapon.png", 
 		weaponType : 0, width: 64, height: 64, 
