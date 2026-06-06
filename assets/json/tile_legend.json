@@ -1,13 +1,5 @@
 {
-  "plane_0_raw": {
-    "0": "rare/unused empty value",
-    "106": "elevator switch",
-    "1-63": "wall texture id",
-    "64-89": "special wall / pushwall / elevator / secret-related tile",
-    "90-101": "door",
-    "107+": "area/floor tile; converted to 0 in plane_0_game"
-  },
-  "plane_0_game": {
+   "plane_0_game": {
     "0": "floor / walkable empty space",
     "106": "elevator switch",
     "1-63": "wall texture id",

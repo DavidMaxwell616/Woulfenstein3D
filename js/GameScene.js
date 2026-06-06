@@ -1,4 +1,5 @@
 import { H, W } from "./config.js";
+import { HUD } from "./Hud.js";
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -10,7 +11,38 @@ export class GameScene extends Phaser.Scene {
             frameWidth: 64,
             frameHeight: 64
         });
-        this.load.image("guard", "assets/images/guard.png");
+        this.load.spritesheet("objects", "assets/images/objects.png", {
+            frameWidth: 64,
+            frameHeight: 64
+        });
+        this.load.image("dashboard", "assets/images/dashboard.png");
+
+        this.load.spritesheet("face", "assets/images/face.png", {
+            frameWidth: 25,
+            frameHeight: 31
+        });
+
+        this.load.spritesheet("weapon_icons", "assets/images/weapon_icons.png", {
+            frameWidth: 49,
+            frameHeight: 26
+        });
+        this.load.spritesheet("guard", "assets/images/guard.png", {
+            frameWidth: 64,
+            frameHeight: 64
+        });
+        this.load.spritesheet("ss", "assets/images/ss.png", {
+            frameWidth: 64,
+            frameHeight: 64
+        });
+        this.load.spritesheet("dog", "assets/images/dog.png", {
+            frameWidth: 64,
+            frameHeight: 64
+        });
+        this.load.spritesheet("weapons", "assets/images/weapons.png", {
+            frameWidth: 64,
+            frameHeight: 64
+        });
+
         this.load.path = "../assets/json/";
         this.load.json("wallData", "wall_map.json");
         this.load.json("objectData", "object_map.json");
@@ -20,24 +52,29 @@ export class GameScene extends Phaser.Scene {
         this.wallData = this.cache.json.get("wallData");
         this.objectData = this.cache.json.get("objectData");
         this.wallMap = this.wallData.wall_levels[0].level_1_wall_map;
+        this.objectMap = this.objectData.object_levels[0].level_1_object_map;
+        this.wallMap = this.wallMap.map(row =>
+            row.map(cell => cell === 106 ? 0 : cell)
+        );
+        this.level = 1;
+        this.score = 0;
+        this.lives = 3;
+        this.health = 100;
+        this.ammo = 50;
+        this.hud = new HUD(this);
         this.mapW = this.wallMap[0].length;
         this.mapH = this.wallMap.length;
-
-        this.player = {
-            x: 28,
-            y: 45.5,
-            rot: 0,
-            moveSpeed: 3.2,
-            rotSpeed: 2.2
-        };
-
+        this.createEnemyAnimations();
+        this.setupObjects();
         this.fov = Phaser.Math.DegToRad(60);
         this.numRays = 320;
         this.stripW = W / this.numRays;
         this.viewDist = (W / 2) / Math.tan(this.fov / 2);
         this.doors = new Map();
         this.keys = this.input.keyboard.createCursorKeys();
-
+        this.DOOR_OPEN_TIME = 5000;
+        this.DOOR_MIN = 89;
+        this.DOOR_MAX = 101;
         // ceiling / floor background
         this.worldGfx = this.add.graphics();
         this.worldGfx.setDepth(0);
@@ -58,46 +95,245 @@ export class GameScene extends Phaser.Scene {
         this.mapGfx = this.add.graphics();
         this.mapGfx.setDepth(9999);
 
-        this.enemies = [
-            {
-                x: 17.5,
-                y: 4.5,
-                sprite: this.add.sprite(0, 0, "guard")
-            },
-            {
-                x: 25.5,
-                y: 16.5,
-                sprite: this.add.sprite(0, 0, "guard")
-            }
-        ];
-
-        this.enemies.forEach(e => {
-            e.sprite.setVisible(false);
-            e.sprite.setOrigin(0.5, 1);
-            this.spriteLayer.add(e.sprite);
-        });
         this.keys.space = this.input.keyboard.addKey(
             Phaser.Input.Keyboard.KeyCodes.SPACE
         );
         this.depthBuffer = [];
     }
 
+    isDoorFrame(frame) {
+        return frame >= this.DOOR_MIN && frame <= this.DOOR_MAX;
+    }
+
+    setupObjects() {
+        this.objects = [];
+        this.turns = [];
+        this.guards = [];
+        this.ss = [];
+        this.dogs = [];
+
+        for (let y = 0; y < this.mapH; y++) {
+            for (let x = 0; x < this.mapW; x++) {
+
+                let obj = this.objectMap[y][x];
+
+                if (obj > 0) {
+                    if (obj >= 19 && obj <= 22) {
+                        this.player = {
+                            x: x,
+                            y: y,
+                            rot: obj - 19 * 90,
+                            moveSpeed: 3.2,
+                            rotSpeed: 2.2
+                        };
+                    }
+                    else if (obj >= 23 && obj <= 56) {
+                        obj -= 21;
+                        this.objects.push({
+                            x: x + 0.5,
+                            y: y + 0.5,
+                            frame: obj,
+                            sprite: this.add.sprite(0, 0, "objects", obj)
+                                .setOrigin(0.5, 0.5)
+                                .setVisible(false)
+                                .setDepth(20)
+                        });
+                    }
+                    else if (obj >= 90 && obj <= 97) {
+                        this.turns.push({
+                            x: x + 0.5,
+                            y: y + 0.5,
+                            direction: Phaser.Math.DegToRad(
+                                (obj - 90) * 45
+                            )
+                        });
+                    }
+                    else if (obj >= 108 && obj <= 115) {
+                        this.guards.push(this.createEnemy(x, y, obj, 108, 112, "guard"));
+                    }
+                    else if (obj >= 126 && obj <= 133) {
+                        this.ss.push(this.createEnemy(x, y, obj, 126, 130, "ss"));
+                    }
+                    else if (obj >= 138 && obj <= 141) {
+                        this.dogs.push(this.createEnemy(x, y, obj, 138, 138, "dog"));
+                    }
+                }
+            }
+        }
+        this.enemies = [
+            ...this.guards,
+            ...this.ss,
+            ...this.dogs
+        ];
+    }
+
+    findTurnAt(x, y) {
+        const tx = Math.floor(x);
+        const ty = Math.floor(y);
+
+        for (const turn of this.turns) {
+            if (
+                Math.floor(turn.x) === tx &&
+                Math.floor(turn.y) === ty
+            ) {
+                return turn;
+            }
+        }
+
+        return null;
+    }
+
+    createEnemy(x, y, obj, base, movingBase, type) {
+        const moving = obj >= movingBase;
+        const dirBase = moving ? movingBase : base;
+        const direction = Phaser.Math.DegToRad((obj - dirBase) * 90);
+
+        const sprite = this.add.sprite(0, 0, type)
+            .setOrigin(0.5)
+            .setVisible(false)
+            .setDepth(1000);
+
+        const enemy = {
+            x: x + 0.5,
+            y: y + 0.5,
+            moving,
+            direction,
+            speed: type === "dog" ? 1.6 : 1.2,
+            type,
+            sprite,
+            state: "walk",
+            dead: false,
+            shooting: false
+        };
+
+        sprite.play(type === "dog" ? "dog-chase" : `${type}-stand`);
+
+        return enemy;
+    }
+
+    createEnemyAnimations() {
+        const mk = (key, sheet, frames, frameRate = 10, repeat = -1) => {
+            if (this.anims.exists(key)) return;
+
+            this.anims.create({
+                key,
+                frames: this.anims.generateFrameNumbers(sheet, {
+                    frames
+                }),
+                frameRate,
+                repeat
+            });
+        };
+
+        // guard animations
+        mk("guard-stand", "guard", [1], 1);
+        mk("guard-chase", "guard", [9, 17, 25, 32], 8);
+        mk("guard-walk-south-west", "guard", [10, 18, 26, 33], 8);
+        mk("guard-walk-west", "guard", [11, 19, 27, 34], 8);
+        mk("guard-walk-north-west", "guard", [12, 20, 28, 35], 8);
+        mk("guard-walk-north", "guard", [13, 21, 29, 36], 8);
+        mk("guard-walk-north-east", "guard", [14, 22, 30, 37], 8);
+        mk("guard-walk-east", "guard", [15, 23, 31, 38], 8);
+        mk("guard-walk-south-east", "guard", [16, 24, 32, 39], 8);
+        mk("guard-shoot", "guard", [50, 51], 8);
+        mk("guard-die", "guard", [41, 42, 43, 44, 45], 8);
+
+        // SS animations
+        mk("ss-stand", "ss", [1], 1);
+        mk("ss-chase", "ss", [9, 17, 25, 32], 8);
+        mk("ss-walk-south-west", "ss", [10, 18, 26, 33], 8);
+        mk("ss-walk-west", "ss", [11, 19, 27, 34], 8);
+        mk("ss-walk-north-west", "ss", [12, 20, 28, 35], 8);
+        mk("ss-walk-north", "ss", [13, 21, 29, 36], 8);
+        mk("ss-walk-north-east", "ss", [14, 22, 30, 37], 8);
+        mk("ss-walk-east", "ss", [15, 23, 31, 38], 8);
+        mk("ss-walk-south-east", "ss", [16, 24, 32, 39], 8);
+        mk("ss-shoot", "ss", [50, 51], 8);
+        mk("ss-die", "ss", [41, 42, 43, 44, 45], 8);
+
+        // dog animations
+        mk("dog-chase", "dog", [1, 9, 25, 32], 10);
+        mk("dog-walk-south-west", "dog", [2, 10, 18, 26], 8);
+        mk("dog-walk-west", "dog", [3, 11, 19, 27], 8);
+        mk("dog-walk-north-west", "dog", [4, 12, 20], 8);
+        mk("dog-walk-north", "dog", [5, 13, 21, 29], 8);
+        mk("dog-walk-north-east", "dog", [6, 14, 22, 30], 8);
+        mk("dog-walk-east", "dog", [7, 15, 23, 31], 8);
+        mk("dog-walk-south-east", "dog", [8, 16, 24, 32], 8);
+        mk("dog-attack", "dog", [37, 38, 39], 8);
+        mk("dog-die", "dog", [33, 34, 35, 36], 8);
+    }
+    getEnemyBaseAnim(enemy) {
+        if (enemy.type === "guard") return "guard";
+        if (enemy.type === "ss") return "ss";
+        if (enemy.type === "dog") return "dog";
+        return "guard";
+    }
+    updateEnemyAnimation(enemy) {
+        if (enemy.dead) {
+            enemy.sprite.play(`${enemy.type}-die`, true);
+            return;
+        }
+
+        if (enemy.shooting && enemy.type !== "dog") {
+            enemy.sprite.play(`${enemy.type}-shoot`, true);
+            return;
+        }
+
+        if (!enemy.moving) {
+            if (enemy.type === "dog") {
+                enemy.sprite.play("dog-chase", true);
+            } else {
+                enemy.sprite.play(`${enemy.type}-stand`, true);
+            }
+            return;
+        }
+
+        enemy.sprite.play(this.getEnemyDirectionAnim(enemy), true);
+    }
+
+    getEnemyDirectionAnim(enemy) {
+        const base = enemy.type;
+
+        const a = Phaser.Math.Angle.Normalize(enemy.direction);
+        const deg = Phaser.Math.RadToDeg(a);
+
+        let dir = "east";
+
+        if (deg >= 337.5 || deg < 22.5) dir = "east";
+        else if (deg < 67.5) dir = "south-east";
+        else if (deg < 112.5) dir = "chase";
+        else if (deg < 157.5) dir = "south-west";
+        else if (deg < 202.5) dir = "west";
+        else if (deg < 247.5) dir = "north-west";
+        else if (deg < 292.5) dir = "north";
+        else dir = "north-east";
+
+        const key = dir === "chase"
+            ? `${base}-chase`
+            : `${base}-walk-${dir}`;
+
+        if (this.anims.exists(key)) {
+            return key;
+        }
+
+        return `${base}-chase`;
+    }
+
     update(time, delta) {
         const dt = delta / 1000;
-
+        this.hud.updateStats({
+            floor: this.level,
+            score: this.score,
+            lives: this.lives,
+            health: this.health,
+            ammo: this.ammo
+        });
         this.movePlayer(dt);
         this.updateEnemies(dt);
         this.renderWorld();
         this.renderSprites();
         this.renderMiniMap();
-        // console.log(
-        //     "player tile:",
-        //     Math.floor(this.player.x),
-        //     Math.floor(this.player.y),
-        //     "value:",
-        //     this.map[Math.floor(this.player.y)][Math.floor(this.player.x)]
-        // );
-
     }
     getDoorKey(x, y) {
         return `${x},${y}`;
@@ -110,10 +346,57 @@ export class GameScene extends Phaser.Scene {
     openDoor(mx, my) {
         const key = this.getDoorKey(mx, my);
 
-        this.doors.set(key, {
-            open: true,
-            amount: 1
+        let door = this.doors.get(key);
+
+        if (!door) {
+            door = {
+                open: true,
+                amount: 0,
+                closing: false
+            };
+
+            this.doors.set(key, door);
+        }
+
+        if (door.tween) {
+            door.tween.stop();
+        }
+
+        door.open = true;
+        door.closing = false;
+
+        door.tween = this.tweens.add({
+            targets: door,
+            amount: 1,
+            duration: 350,
+            ease: "Linear",
+            onComplete: () => {
+                this.time.delayedCall(this.DOOR_OPEN_TIME, () => {
+                    door.closing = true;
+
+                    door.tween = this.tweens.add({
+                        targets: door,
+                        amount: 0,
+                        duration: 350,
+                        ease: "Linear",
+                        onComplete: () => {
+                            door.open = false;
+                            door.closing = false;
+                        }
+                    });
+                });
+            }
         });
+    }
+    tryOpenFacingDoor() {
+        const tx = Math.floor(this.player.x + Math.cos(this.player.rot));
+        const ty = Math.floor(this.player.y + Math.sin(this.player.rot));
+
+        const tile = this.wallMap[ty]?.[tx];
+
+        if (this.isDoorFrame(tile)) {
+            this.openDoor(tx, ty);
+        }
     }
     movePlayer(dt) {
         if (this.keys.left.isDown) {
@@ -128,6 +411,10 @@ export class GameScene extends Phaser.Scene {
 
         if (this.keys.up.isDown) move = 1;
         if (this.keys.down.isDown) move = -1;
+
+        if (Phaser.Input.Keyboard.JustDown(this.keys.space)) {
+            this.tryOpenFacingDoor();
+        }
 
         if (move === 0) return;
 
@@ -152,33 +439,51 @@ export class GameScene extends Phaser.Scene {
         if (!this.isBlocking(this.player.x, ny)) {
             this.player.y = ny;
         }
-        if (this.keys.space?.isDown) {
-            const tx = Math.floor(this.player.x + Math.cos(this.player.rot));
-            const ty = Math.floor(this.player.y + Math.sin(this.player.rot));
 
-            if (this.map[ty]?.[tx] === 5) {
-                this.openDoor(tx, ty);
-            }
-        }
     }
 
     updateEnemies(dt) {
+        if (!this.enemies) return;
+
         for (const enemy of this.enemies) {
-            const dx = this.player.x - enemy.x;
-            const dy = this.player.y - enemy.y;
-            const dist = Math.hypot(dx, dy);
+            if (!enemy.moving) {
+                this.updateEnemyAnimation(enemy);
+                continue;
+            }
 
-            if (dist > 4) {
-                const a = Math.atan2(dy, dx);
+            const turn = this.findTurnAt(enemy.x, enemy.y);
 
-                const nx = enemy.x + Math.cos(a) * dt * 1.2;
-                const ny = enemy.y + Math.sin(a) * dt * 1.2;
+            if (turn) {
+                const dx = Math.abs(enemy.x - turn.x);
+                const dy = Math.abs(enemy.y - turn.y);
 
-                if (!this.isBlocking(nx, ny)) {
-                    enemy.x = nx;
-                    enemy.y = ny;
+                if (dx < 0.12 && dy < 0.12) {
+                    enemy.x = turn.x;
+                    enemy.y = turn.y;
+                    enemy.direction = turn.direction;
                 }
             }
+
+            const nx =
+                enemy.x +
+                Math.cos(enemy.direction) *
+                enemy.speed *
+                dt;
+
+            const ny =
+                enemy.y +
+                Math.sin(enemy.direction) *
+                enemy.speed *
+                dt;
+
+            if (!this.isBlocking(nx, ny)) {
+                enemy.x = nx;
+                enemy.y = ny;
+            } else {
+                enemy.direction += Math.PI;
+            }
+
+            this.updateEnemyAnimation(enemy);
         }
     }
 
@@ -222,16 +527,32 @@ export class GameScene extends Phaser.Scene {
             const wallH = this.viewDist / dist;
             const top = Math.floor((H - wallH) / 2);
 
-            const frameIndex = Math.max(0, hit.wall - 1);
+            let frameIndex = Math.max(0, hit.wall - 1);
+
+            //doors
+            if (this.isDoorFrame(frameIndex)) {
+                frameIndex -= 61;
+            }
 
             const frame = this.textures.getFrame("walls", frameIndex);
-
-            const texX = Phaser.Math.Clamp(
+            let texX = Phaser.Math.Clamp(
                 Math.floor(hit.texX * 64),
                 0,
                 63
             );
 
+            if (this.isDoorFrame(hit.wall)) {
+                const door = this.getDoorAt(hit.mapX, hit.mapY);
+
+                if (door) {
+                    // right-to-left opening
+                    texX -= Math.floor(door.amount * 64);
+
+                    if (texX < 0) {
+                        continue;
+                    }
+                }
+            }
             const sx = frame.cutX + texX;
             const sy = frame.cutY;
 
@@ -298,19 +619,18 @@ export class GameScene extends Phaser.Scene {
 
                 const my = Math.floor(y);
 
-                const tile = this.map[my]?.[mx];
+                let tile = this.wallMap[my]?.[mx];
 
                 if (tile > 0) {
-                    if (tile === 5) {
+                    if (this.isDoorFrame(tile)) {
                         const door = this.getDoorAt(mx, my);
 
-                        if (door && door.open) {
+                        if (door && door.amount >= 0.95) {
                             x += dx;
                             y += dy;
                             continue;
                         }
                     }
-
                     const dist = Math.hypot(
                         x - this.player.x,
                         y - this.player.y
@@ -328,9 +648,11 @@ export class GameScene extends Phaser.Scene {
                         x,
                         y,
                         dist,
-                        wall: this.map[my][mx],
+                        wall: this.wallMap[my][mx],
                         horizontal: false,
-                        texX
+                        texX,
+                        mapX: mx,
+                        mapY: my,
                     };
 
                     break;
@@ -372,13 +694,13 @@ export class GameScene extends Phaser.Scene {
                     y + (down ? 0 : -1)
                 );
 
-                const tile = this.map[my]?.[mx];
+                const tile = this.wallMap[my]?.[mx];
 
                 if (tile > 0) {
-                    if (tile === 5) {
+                    if (this.isDoorFrame(tile)) {
                         const door = this.getDoorAt(mx, my);
 
-                        if (door && door.open) {
+                        if (door && door.amount >= 0.95) {
                             x += dx;
                             y += dy;
                             continue;
@@ -406,9 +728,11 @@ export class GameScene extends Phaser.Scene {
                             x,
                             y,
                             dist,
-                            wall: this.map[my][mx],
+                            wall: this.wallMap[my][mx],
                             horizontal: true,
-                            texX
+                            texX,
+                            mapX: mx,
+                            mapY: my,
                         };
                     }
 
@@ -424,48 +748,102 @@ export class GameScene extends Phaser.Scene {
     }
 
     renderSprites() {
-        const sprites = [...this.enemies];
+        const sprites = [
+            ...this.objects,
+            ...this.guards,
+            ...this.ss,
+            ...this.dogs
+        ];
 
         sprites.sort((a, b) => {
-            const da = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
-            const db = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
+            const da = Phaser.Math.Distance.Between(
+                this.player.x,
+                this.player.y,
+                a.x,
+                a.y
+            );
+
+            const db = Phaser.Math.Distance.Between(
+                this.player.x,
+                this.player.y,
+                b.x,
+                b.y
+            );
+
             return db - da;
         });
 
         for (const obj of sprites) {
+
             const dx = obj.x - this.player.x;
             const dy = obj.y - this.player.y;
 
-            let angle = Math.atan2(dy, dx) - this.player.rot;
+            let angle =
+                Math.atan2(dy, dx) -
+                this.player.rot;
+
             angle = Phaser.Math.Angle.Wrap(angle);
 
-            if (angle < -this.fov / 2 || angle > this.fov / 2) {
+            if (
+                angle < -this.fov / 2 ||
+                angle > this.fov / 2
+            ) {
                 obj.sprite.setVisible(false);
                 continue;
             }
 
             const dist = Math.hypot(dx, dy);
-            const size = this.viewDist / (Math.cos(angle) * dist);
+
+            if (dist < 0.05) {
+                obj.sprite.setVisible(false);
+                continue;
+            }
+
+            const correctedDist =
+                Math.cos(angle) * dist;
+
+            const size =
+                this.viewDist /
+                Math.max(0.1, correctedDist);
 
             const screenX =
                 W / 2 +
                 Math.tan(angle) * this.viewDist;
 
-            const rayIndex = Math.floor(screenX / this.stripW);
+            const rayIndex = Phaser.Math.Clamp(
+                Math.floor(screenX / this.stripW),
+                0,
+                this.depthBuffer.length - 1
+            );
 
             if (
                 rayIndex >= 0 &&
-                rayIndex < this.depthBuffer.length &&
                 dist > this.depthBuffer[rayIndex]
             ) {
                 obj.sprite.setVisible(false);
                 continue;
             }
 
+            // enemy animation update
+            if (obj.type) {
+                this.updateEnemyAnimation(obj);
+            }
+
             obj.sprite.setVisible(true);
-            obj.sprite.setPosition(screenX, H / 2);
-            obj.sprite.setDisplaySize(size, size);
-            obj.sprite.setDepth(1000 - dist);
+
+            obj.sprite.setPosition(
+                screenX,
+                H / 2 + size * 0.15
+            );
+
+            obj.sprite.setDisplaySize(
+                size,
+                size
+            );
+
+            obj.sprite.setDepth(
+                100000 - dist
+            );
         }
     }
 
@@ -504,7 +882,7 @@ export class GameScene extends Phaser.Scene {
 
         for (let y = 0; y < this.mapH; y++) {
             for (let x = 0; x < this.mapW; x++) {
-                if (this.map[y][x] > 0) {
+                if (this.wallMap[y][x] > 0) {
                     g.fillRect(
                         offsetX + x * s,
                         offsetY + y * s,
@@ -531,7 +909,7 @@ export class GameScene extends Phaser.Scene {
         );
 
         // enemies
-        for (const e of this.enemies) {
+        for (const e of this.guards) {
             g.fillStyle(0x00aaff);
             g.fillCircle(
                 offsetX + e.x * s,
@@ -549,16 +927,13 @@ export class GameScene extends Phaser.Scene {
             return true;
         }
 
-        const tile = this.map[my][mx];
-
+        const tile = this.wallMap[my][mx];
+        if (this.isDoorFrame(tile)) {
+            const door = this.getDoorAt(mx, my);
+            return !(door && door.amount >= 0.95);
+        }
         if (tile === 0) {
             return false;
-        }
-
-        // door tile
-        if (tile === 5) {
-            const door = this.getDoorAt(mx, my);
-            return !(door && door.open);
         }
 
         return tile > 0;
