@@ -1,3 +1,4 @@
+import { SplashScene } from "./SplashScene.js";
 import { GameScene } from "./GameScene.js";
 import { W, H } from "./config.js";
 
@@ -10,7 +11,7 @@ const config = {
         default: "arcade",
         arcade: { debug: false }
     },
-    scene: [GameScene]
+    scene: [SplashScene, GameScene]
 };
 
 new Phaser.Game(config);

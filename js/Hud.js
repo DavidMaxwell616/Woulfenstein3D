@@ -11,7 +11,7 @@ export class HUD {
         };
 
         const scale = 1.5;
-
+        const textY = -5;
         this.container = scene.add.container(scene.game.config.width / 2, scene.game.config.height - 50);
         this.container.setDepth(9999);
         this.container.setScrollFactor(0);
@@ -19,11 +19,11 @@ export class HUD {
         this.dashboard = scene.add.image(0, 0, "dashboard")
             .setOrigin(0.5, 0.5);
 
-        this.floorText = scene.add.text(-230, -10, this.stats.floor, this.textStyle());
-        this.scoreText = scene.add.text(-160, -10, this.stats.score, this.textStyle());
-        this.livesText = scene.add.text(-80, -10, this.stats.lives, this.textStyle());
-        this.healthText = scene.add.text(10, -10, this.stats.health, this.textStyle());
-        this.ammoText = scene.add.text(80, -10, this.stats.ammo, this.textStyle());
+        this.floorText = scene.add.text(-230, textY, this.stats.floor, this.textStyle());
+        this.scoreText = scene.add.text(-160, textY, this.stats.score, this.textStyle());
+        this.livesText = scene.add.text(-80, textY, this.stats.lives, this.textStyle());
+        this.healthText = scene.add.text(10, textY, this.stats.health, this.textStyle());
+        this.ammoText = scene.add.text(80, textY, this.stats.ammo, this.textStyle());
 
 
         if (!scene.anims.exists("face_idle")) {
@@ -61,8 +61,9 @@ export class HUD {
 
     textStyle() {
         return {
-            fontFamily: "Arial",
+            fontFamily: "Courier New",
             fontSize: "32px",
+            fontStyle: "bold",
             color: "#939CFE"
         };
     }

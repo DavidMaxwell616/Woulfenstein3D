@@ -1,4 +1,4 @@
-import { H, W } from "./config.js";
+import { H, W, pickupData } from "./config.js";
 import { HUD } from "./Hud.js";
 
 export class GameScene extends Phaser.Scene {
@@ -38,7 +38,7 @@ export class GameScene extends Phaser.Scene {
             frameWidth: 64,
             frameHeight: 64
         });
-        this.load.spritesheet("weapons", "assets/images/weapons.png", {
+        this.load.spritesheet("weapon", "assets/images/weapons.png", {
             frameWidth: 64,
             frameHeight: 64
         });
@@ -78,6 +78,22 @@ export class GameScene extends Phaser.Scene {
         // ceiling / floor background
         this.worldGfx = this.add.graphics();
         this.worldGfx.setDepth(0);
+        this.weapon = this.add.sprite(W / 2, H * .57, "weapon", 1)
+            .setOrigin(0.5, 0.5)
+            .setDepth(82000)
+            .setScale(5);
+
+        if (!this.anims.exists("weapon")) {
+            this.anims.create({
+                key: "weapon",
+                frames: this.anims.generateFrameNumbers("weapon", {
+                    start: 0,
+                    end: 4
+                }),
+                frameRate: 10,
+                repeat: 0
+            });
+        }
 
         this.wallCanvas = this.textures.createCanvas("wallScreen", W, H);
         this.wallCtx = this.wallCanvas.getContext();
@@ -94,9 +110,16 @@ export class GameScene extends Phaser.Scene {
 
         this.mapGfx = this.add.graphics();
         this.mapGfx.setDepth(9999);
+        this.minimapVisible = true;
 
+        this.keys.m = this.input.keyboard.addKey(
+            Phaser.Input.Keyboard.KeyCodes.M
+        );
         this.keys.space = this.input.keyboard.addKey(
             Phaser.Input.Keyboard.KeyCodes.SPACE
+        );
+        this.keys.fire = this.input.keyboard.addKey(
+            Phaser.Input.Keyboard.KeyCodes.CTRL
         );
         this.depthBuffer = [];
     }
@@ -104,7 +127,24 @@ export class GameScene extends Phaser.Scene {
     isDoorFrame(frame) {
         return frame >= this.DOOR_MIN && frame <= this.DOOR_MAX;
     }
+    fireWeapon() {
+        console.log('fire');
+        if (this.ammo <= 0) {
+            return;
+        }
 
+        this.ammo--;
+
+        this.weapon.play("weapon");
+
+        const hit = this.castRay(this.player.rot);
+
+        if (!hit) {
+            return;
+        }
+
+        console.log("BANG");
+    }
     setupObjects() {
         this.objects = [];
         this.turns = [];
@@ -121,7 +161,7 @@ export class GameScene extends Phaser.Scene {
                     if (obj >= 19 && obj <= 22) {
                         this.player = {
                             x: x,
-                            y: y,
+                            y: 32, //y,
                             rot: obj - 19 * 90,
                             moveSpeed: 3.2,
                             rotSpeed: 2.2
@@ -132,7 +172,12 @@ export class GameScene extends Phaser.Scene {
                         this.objects.push({
                             x: x + 0.5,
                             y: y + 0.5,
+                            tileX: x,
+                            tileY: y,
+                            objectCode: obj,
                             frame: obj,
+                            pickup: pickupData[obj] || null,
+                            pickedUp: false,
                             sprite: this.add.sprite(0, 0, "objects", obj)
                                 .setOrigin(0.5, 0.5)
                                 .setVisible(false)
@@ -168,14 +213,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     findTurnAt(x, y) {
-        const tx = Math.floor(x);
-        const ty = Math.floor(y);
-
         for (const turn of this.turns) {
-            if (
-                Math.floor(turn.x) === tx &&
-                Math.floor(turn.y) === ty
-            ) {
+            const dx = Math.abs(x - turn.x);
+            const dy = Math.abs(y - turn.y);
+
+            if (dx < 0.15 && dy < 0.15) {
                 return turn;
             }
         }
@@ -329,6 +371,14 @@ export class GameScene extends Phaser.Scene {
             health: this.health,
             ammo: this.ammo
         });
+        this.checkPickups();
+        if (Phaser.Input.Keyboard.JustDown(this.keys.m)) {
+            this.minimapVisible = !this.minimapVisible;
+            this.mapGfx.setVisible(this.minimapVisible);
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.fire)) {
+            this.fireWeapon();
+        }
         this.movePlayer(dt);
         this.updateEnemies(dt);
         this.renderWorld();
@@ -398,6 +448,36 @@ export class GameScene extends Phaser.Scene {
             this.openDoor(tx, ty);
         }
     }
+    checkPickups() {
+        const px = Math.floor(this.player.x);
+        const py = Math.floor(this.player.y);
+
+        for (const obj of this.objects) {
+            if (
+                obj.pickedUp ||
+                !obj.pickup ||
+                obj.tileX !== px ||
+                obj.tileY !== py
+            ) {
+                continue;
+            }
+
+            obj.pickedUp = true;
+            obj.sprite.setVisible(false);
+            obj.sprite.destroy();
+
+            this.score += obj.pickup.score || 0;
+            this.health = Phaser.Math.Clamp(
+                this.health + (obj.pickup.health || 0),
+                0,
+                100
+            );
+
+            this.objectMap[obj.tileY][obj.tileX] = 0;
+        }
+
+        this.objects = this.objects.filter(obj => !obj.pickedUp);
+    }
     movePlayer(dt) {
         if (this.keys.left.isDown) {
             this.player.rot -= this.player.rotSpeed * dt;
@@ -446,9 +526,13 @@ export class GameScene extends Phaser.Scene {
         if (!this.enemies) return;
 
         for (const enemy of this.enemies) {
-            if (!enemy.moving) {
+            if (enemy.dead) {
                 this.updateEnemyAnimation(enemy);
                 continue;
+            }
+
+            if (!enemy.moving) {
+                enemy.moving = true;
             }
 
             const turn = this.findTurnAt(enemy.x, enemy.y);
@@ -464,29 +548,53 @@ export class GameScene extends Phaser.Scene {
                 }
             }
 
-            const nx =
-                enemy.x +
-                Math.cos(enemy.direction) *
-                enemy.speed *
-                dt;
+            const step = enemy.speed * dt;
 
-            const ny =
-                enemy.y +
-                Math.sin(enemy.direction) *
-                enemy.speed *
-                dt;
+            const nx = enemy.x + Math.cos(enemy.direction) * step;
+            const ny = enemy.y + Math.sin(enemy.direction) * step;
 
             if (!this.isBlocking(nx, ny)) {
                 enemy.x = nx;
                 enemy.y = ny;
             } else {
-                enemy.direction += Math.PI;
+                this.turnEnemyAtWall(enemy);
             }
 
             this.updateEnemyAnimation(enemy);
         }
     }
+    turnEnemyAtWall(enemy) {
+        const choices = [
+            enemy.direction + Math.PI / 2,
+            enemy.direction - Math.PI / 2,
+            enemy.direction + Math.PI
+        ];
 
+        for (const dir of choices) {
+            const tx = enemy.x + Math.cos(dir) * 0.25;
+            const ty = enemy.y + Math.sin(dir) * 0.25;
+
+            if (!this.isBlocking(tx, ty)) {
+                enemy.direction = Phaser.Math.Angle.Normalize(dir);
+
+                // nudge away from the wall so it does not keep colliding
+                enemy.x += Math.cos(enemy.direction) * 0.03;
+                enemy.y += Math.sin(enemy.direction) * 0.03;
+
+                return;
+            }
+        }
+
+        // fallback: random cardinal direction
+        const dirs = [
+            0,
+            Math.PI / 2,
+            Math.PI,
+            -Math.PI / 2
+        ];
+
+        enemy.direction = Phaser.Utils.Array.GetRandom(dirs);
+    }
     renderWorld() {
         const g = this.worldGfx;
         g.clear();
@@ -829,7 +937,7 @@ export class GameScene extends Phaser.Scene {
                 this.updateEnemyAnimation(obj);
             }
 
-            obj.sprite.setVisible(true);
+            obj.sprite.setVisible(!obj.pickedUp);
 
             obj.sprite.setPosition(
                 screenX,
@@ -848,6 +956,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     renderMiniMap() {
+        if (!this.minimapVisible) {
+            this.mapGfx.clear();
+            return;
+        }
         const g = this.mapGfx;
 
         const miniW = 240;
