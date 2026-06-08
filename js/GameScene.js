@@ -160,7 +160,7 @@ export class GameScene extends Phaser.Scene {
             },
             3: {
                 name: "Gatling Gun",
-                name: "gatling_gun",
+                animation: "gatling_gun",
                 range: 28,
                 damage: 100,
                 ammo: true
@@ -396,7 +396,21 @@ export class GameScene extends Phaser.Scene {
             ...this.dogs
         ];
     }
+    setWeapon(weaponIndex) {
+        this.weapon = weaponIndex;
 
+        this.hud.weaponIcon.setFrame(weaponIndex);
+
+        const idleFrames = [
+            0,   // knife
+            5,   // pistol
+            10,  // machine gun
+            15   // gatling gun
+        ];
+
+        this.weaponSprite.stop();
+        this.weaponSprite.setFrame(idleFrames[weaponIndex]);
+    }
     findTurnAt(x, y) {
         for (const turn of this.turns) {
             const dx = Math.abs(x - turn.x);
@@ -630,21 +644,19 @@ export class GameScene extends Phaser.Scene {
             this.fireWeapon();
         }
         if (Phaser.Input.Keyboard.JustDown(this.keys.one)) {
-            this.weapon = 0; // knife
-            this.hud.weaponIcon.setFrame(0);
+            this.setWeapon(0);
         }
 
         if (Phaser.Input.Keyboard.JustDown(this.keys.two)) {
-            this.weapon = 1; // pistol
-            this.hud.weaponIcon.setFrame(1);
+            this.setWeapon(1);
         }
+
         if (Phaser.Input.Keyboard.JustDown(this.keys.three)) {
-            this.weapon = 2; // machine gun
-            this.hud.weaponIcon.setFrame(2);
+            this.setWeapon(2);
         }
+
         if (Phaser.Input.Keyboard.JustDown(this.keys.four)) {
-            this.weapon = 3; // gatling gun
-            this.hud.weaponIcon.setFrame(3);
+            this.setWeapon(3);
         }
         this.movePlayer(dt);
         this.updateEnemies(dt);
