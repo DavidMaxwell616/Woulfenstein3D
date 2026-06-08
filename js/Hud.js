@@ -13,7 +13,7 @@ export class HUD {
         const scale = 1.5;
         const textY = -5;
         this.container = scene.add.container(scene.game.config.width / 2, scene.game.config.height - 50);
-        this.container.setDepth(9999);
+        this.container.setDepth(1000000);
         this.container.setScrollFactor(0);
         this.container.setScale(scale);
         this.dashboard = scene.add.image(0, 0, "dashboard")
@@ -24,23 +24,27 @@ export class HUD {
         this.livesText = scene.add.text(-80, textY, this.stats.lives, this.textStyle());
         this.healthText = scene.add.text(10, textY, this.stats.health, this.textStyle());
         this.ammoText = scene.add.text(80, textY, this.stats.ammo, this.textStyle());
-
-
-        if (!scene.anims.exists("face_idle")) {
-            scene.anims.create({
-                key: "face_idle",
-                frames: scene.anims.generateFrameNumbers("face", {
-                    start: 0,
-                    end: 3
-                }),
-                frameRate: 1,
-                repeat: -1
-            });
-        }
         this.face = scene.add.sprite(-20, 0, "face")
             .setOrigin(0.5)
-            .setScale(scale)
-            .play("face_idle");
+            .setScale(scale);
+
+        for (let index = 0; index < 24; index += 4) {
+            const key = index / 4;
+            const frames = [index, index + 1, index + 2, index + 3];
+
+            if (!scene.anims.exists("face_" + key)) {
+                scene.anims.create({
+                    key: "face_" + key,
+                    frames: scene.anims.generateFrameNumbers("face", {
+                        frames
+                    }),
+                    frameRate: 4,
+                    repeat: -1
+                });
+            }
+        }
+
+        this.face.play("face_0");
 
 
         this.weaponIcon = scene.add.sprite(200, 5, "weapon_icons", 0)

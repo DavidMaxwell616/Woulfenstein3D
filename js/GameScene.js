@@ -56,10 +56,15 @@ export class GameScene extends Phaser.Scene {
         this.wallMap = this.wallMap.map(row =>
             row.map(cell => cell === 106 ? 0 : cell)
         );
-        this.level = 1;
-        this.score = 0;
-        this.lives = 3;
+        const data = this.scene.settings.data || {};
+        this.level = data.level ?? 1;
+        this.score = data.score ?? 0;
+        this.lives = data.lives ?? 3;
+        this.playerDying = false;
         this.health = 100;
+        this.ammo = 50;
+        this.health = 100;
+        this.oldHealth = 100;
         this.ammo = 50;
         this.hud = new HUD(this);
         this.mapW = this.wallMap[0].length;
@@ -78,14 +83,14 @@ export class GameScene extends Phaser.Scene {
         // ceiling / floor background
         this.worldGfx = this.add.graphics();
         this.worldGfx.setDepth(0);
-        this.weapon = this.add.sprite(W / 2, H * .57, "weapon", 1)
+        this.weaponSprite = this.add.sprite(W / 2, H * .57, "weapon", 1)
             .setOrigin(0.5, 0.5)
-            .setDepth(82000)
+            .setDepth(1000001)
             .setScale(5);
 
-        if (!this.anims.exists("weapon")) {
+        if (!this.anims.exists("knife")) {
             this.anims.create({
-                key: "weapon",
+                key: "knife",
                 frames: this.anims.generateFrameNumbers("weapon", {
                     start: 0,
                     end: 4
@@ -94,6 +99,73 @@ export class GameScene extends Phaser.Scene {
                 repeat: 0
             });
         }
+        if (!this.anims.exists("pistol")) {
+            this.anims.create({
+                key: "pistol",
+                frames: this.anims.generateFrameNumbers("weapon", {
+                    start: 5,
+                    end: 9
+                }),
+                frameRate: 10,
+                repeat: 0
+            });
+        }
+        if (!this.anims.exists("machine_gun")) {
+            this.anims.create({
+                key: "machine_gun",
+                frames: this.anims.generateFrameNumbers("weapon", {
+                    start: 10,
+                    end: 14
+                }),
+                frameRate: 10,
+                repeat: 0
+            });
+        }
+
+        if (!this.anims.exists("gatling_gun")) {
+            this.anims.create({
+                key: "gatling_gun",
+                frames: this.anims.generateFrameNumbers("weapon", {
+                    start: 15,
+                    end: 19
+                }),
+                frameRate: 10,
+                repeat: 0
+            });
+        }
+
+        this.weapon = 0;
+
+        this.weapons = {
+            0: {
+                name: "Knife",
+                animation: "knife",
+                range: 1.25,
+                damage: 35,
+                ammo: false
+            },
+
+            1: {
+                name: "Pistol",
+                animation: "pistol",
+                damage: 25,
+                ammo: true
+            },
+            2: {
+                name: "Machine Gun",
+                animation: "machine_gun",
+                range: 18,
+                damage: 50,
+                ammo: true
+            },
+            3: {
+                name: "Gatling Gun",
+                name: "gatling_gun",
+                range: 28,
+                damage: 100,
+                ammo: true
+            }
+        };
 
         this.wallCanvas = this.textures.createCanvas("wallScreen", W, H);
         this.wallCtx = this.wallCanvas.getContext();
@@ -121,29 +193,139 @@ export class GameScene extends Phaser.Scene {
         this.keys.fire = this.input.keyboard.addKey(
             Phaser.Input.Keyboard.KeyCodes.CTRL
         );
+        this.keys.one = this.input.keyboard.addKey(
+            Phaser.Input.Keyboard.KeyCodes.ONE
+        );
+        this.keys.two = this.input.keyboard.addKey(
+            Phaser.Input.Keyboard.KeyCodes.TWO
+        );
+        this.keys.three = this.input.keyboard.addKey(
+            Phaser.Input.Keyboard.KeyCodes.THREE
+        );
+        this.keys.four = this.input.keyboard.addKey(
+            Phaser.Input.Keyboard.KeyCodes.FOUR
+        );
         this.depthBuffer = [];
     }
 
+    isSecretDoorMarker(mx, my) {
+        return this.objectMap[my]?.[mx] === 98;
+    }
+
+    isAdjacentToSecretDoor(mx, my) {
+        return (
+            this.isSecretDoorMarker(mx + 1, my) ||
+            this.isSecretDoorMarker(mx - 1, my) ||
+            this.isSecretDoorMarker(mx, my + 1) ||
+            this.isSecretDoorMarker(mx, my - 1)
+        );
+    }
+    respawnPlayer() {
+        this.health = 100;
+        this.playerDying = false;
+
+        this.player.x = this.startX;
+        this.player.y = this.startY;
+        this.player.rot = this.startRot;
+
+        this.resetEnemies();
+    }
     isDoorFrame(frame) {
         return frame >= this.DOOR_MIN && frame <= this.DOOR_MAX;
     }
+    enemyCanSeePoint(x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+
+        const dist = Math.hypot(dx, dy);
+        const steps = Math.ceil(dist * 8);
+
+        for (let i = 1; i < steps; i++) {
+            const t = i / steps;
+
+            const x = x1 + dx * t;
+            const y = y1 + dy * t;
+
+            if (this.isBlocking(x, y)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     fireWeapon() {
-        console.log('fire');
-        if (this.ammo <= 0) {
+        const weapon = this.weapons[this.weapon];
+        this.weaponSprite.play(weapon.animation);
+
+        if (weapon.ammo && this.ammo <= 0) {
             return;
         }
 
-        this.ammo--;
-
-        this.weapon.play("weapon");
-
-        const hit = this.castRay(this.player.rot);
-
-        if (!hit) {
-            return;
+        if (weapon.ammo) {
+            this.ammo--;
         }
 
-        console.log("BANG");
+        this.hud.weaponIcon.setFrame(
+            this.weapon === 0 ? 0 : 2
+        );
+
+        this.time.delayedCall(120, () => {
+            this.hud.weaponIcon.setFrame(
+                this.weapon === 0 ? 0 : 1
+            );
+        });
+
+        let bestEnemy = null;
+        let bestDist = Infinity;
+
+        for (const enemy of this.enemies) {
+
+            if (enemy.dead) continue;
+
+            const dx = enemy.x - this.player.x;
+            const dy = enemy.y - this.player.y;
+
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > weapon.range) continue;
+
+            const angle =
+                Phaser.Math.Angle.Wrap(
+                    Math.atan2(dy, dx) -
+                    this.player.rot
+                );
+
+            const aimCone =
+                this.weapon === 0
+                    ? Phaser.Math.DegToRad(45)
+                    : Phaser.Math.DegToRad(10);
+
+            if (Math.abs(angle) > aimCone) {
+                continue;
+            }
+
+            if (!this.enemyCanSeePoint(
+                this.player.x,
+                this.player.y,
+                enemy.x,
+                enemy.y
+            )) {
+                continue;
+            }
+
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestEnemy = enemy;
+            }
+        }
+
+        if (bestEnemy) {
+            this.damageEnemy(
+                bestEnemy,
+                weapon.damage
+            );
+        }
     }
     setupObjects() {
         this.objects = [];
@@ -161,11 +343,14 @@ export class GameScene extends Phaser.Scene {
                     if (obj >= 19 && obj <= 22) {
                         this.player = {
                             x: x,
-                            y: 32, //y,
+                            y: y,
                             rot: obj - 19 * 90,
                             moveSpeed: 3.2,
                             rotSpeed: 2.2
                         };
+                        this.startX = this.player.x;
+                        this.startY = this.player.y;
+                        this.startRot = this.player.rot;
                     }
                     else if (obj >= 23 && obj <= 56) {
                         obj -= 21;
@@ -238,7 +423,14 @@ export class GameScene extends Phaser.Scene {
         const enemy = {
             x: x + 0.5,
             y: y + 0.5,
+
+            startX: x + 0.5,
+            startY: y + 0.5,
+            startDirection: direction,
+
             moving,
+            startMoving: moving,
+
             direction,
             speed: type === "dog" ? 1.6 : 1.2,
             type,
@@ -252,7 +444,28 @@ export class GameScene extends Phaser.Scene {
 
         return enemy;
     }
+    resetEnemies() {
+        for (const enemy of this.enemies) {
+            enemy.x = enemy.startX;
+            enemy.y = enemy.startY;
+            enemy.direction = enemy.startDirection;
+            enemy.moving = enemy.startMoving;
 
+            enemy.dead = false;
+            enemy.shooting = false;
+            enemy.chasing = false;
+            enemy.seesPlayer = false;
+            enemy.nextShotTime = 0;
+
+            enemy.sprite.setVisible(false);
+
+            if (enemy.type === "dog") {
+                enemy.sprite.play("dog-chase", true);
+            } else {
+                enemy.sprite.play(`${enemy.type}-stand`, true);
+            }
+        }
+    }
     createEnemyAnimations() {
         const mk = (key, sheet, frames, frameRate = 10, repeat = -1) => {
             if (this.anims.exists(key)) return;
@@ -268,8 +481,8 @@ export class GameScene extends Phaser.Scene {
         };
 
         // guard animations
-        mk("guard-stand", "guard", [1], 1);
-        mk("guard-chase", "guard", [9, 17, 25, 32], 8);
+        mk("guard-stand", "guard", [0], 1, 0);
+        mk("guard-chase", "guard", [8, 16, 24, 31], 8);
         mk("guard-walk-south-west", "guard", [10, 18, 26, 33], 8);
         mk("guard-walk-west", "guard", [11, 19, 27, 34], 8);
         mk("guard-walk-north-west", "guard", [12, 20, 28, 35], 8);
@@ -277,12 +490,13 @@ export class GameScene extends Phaser.Scene {
         mk("guard-walk-north-east", "guard", [14, 22, 30, 37], 8);
         mk("guard-walk-east", "guard", [15, 23, 31, 38], 8);
         mk("guard-walk-south-east", "guard", [16, 24, 32, 39], 8);
-        mk("guard-shoot", "guard", [50, 51], 8);
-        mk("guard-die", "guard", [41, 42, 43, 44, 45], 8);
+        mk("guard-shoot", "guard", [49, 50], 8);
+        mk("guard-die", "guard", [41, 42, 43, 44, 45], 8, 0);
+        mk("guard-dead", "guard", [44], 1, 0);
 
         // SS animations
-        mk("ss-stand", "ss", [1], 1);
-        mk("ss-chase", "ss", [9, 17, 25, 32], 8);
+        mk("ss-stand", "ss", [0], 1, 0);
+        mk("ss-chase", "ss", [8, 16, 24, 31], 8);
         mk("ss-walk-south-west", "ss", [10, 18, 26, 33], 8);
         mk("ss-walk-west", "ss", [11, 19, 27, 34], 8);
         mk("ss-walk-north-west", "ss", [12, 20, 28, 35], 8);
@@ -290,11 +504,12 @@ export class GameScene extends Phaser.Scene {
         mk("ss-walk-north-east", "ss", [14, 22, 30, 37], 8);
         mk("ss-walk-east", "ss", [15, 23, 31, 38], 8);
         mk("ss-walk-south-east", "ss", [16, 24, 32, 39], 8);
-        mk("ss-shoot", "ss", [50, 51], 8);
-        mk("ss-die", "ss", [41, 42, 43, 44, 45], 8);
+        mk("ss-shoot", "ss", [49, 50], 8);
+        mk("ss-die", "ss", [41, 42, 43, 44, 45], 8, 0);
+        mk("ss-dead", "ss", [44], 1, 0);
 
         // dog animations
-        mk("dog-chase", "dog", [1, 9, 25, 32], 10);
+        mk("dog-chase", "dog", [0, 8, 16, 24], 10);
         mk("dog-walk-south-west", "dog", [2, 10, 18, 26], 8);
         mk("dog-walk-west", "dog", [3, 11, 19, 27], 8);
         mk("dog-walk-north-west", "dog", [4, 12, 20], 8);
@@ -304,6 +519,7 @@ export class GameScene extends Phaser.Scene {
         mk("dog-walk-south-east", "dog", [8, 16, 24, 32], 8);
         mk("dog-attack", "dog", [37, 38, 39], 8);
         mk("dog-die", "dog", [33, 34, 35, 36], 8);
+        mk("dog-dead", "dog", [36], 1, 0);
     }
     getEnemyBaseAnim(enemy) {
         if (enemy.type === "guard") return "guard";
@@ -312,14 +528,20 @@ export class GameScene extends Phaser.Scene {
         return "guard";
     }
     updateEnemyAnimation(enemy) {
-        if (enemy.dead) {
-            enemy.sprite.play(`${enemy.type}-die`, true);
-            return;
-        }
+        if (enemy.dead) return;
 
         if (enemy.shooting && enemy.type !== "dog") {
             enemy.sprite.play(`${enemy.type}-shoot`, true);
             return;
+        }
+
+        if (enemy.chasing) {
+            const chaseAnim = `${enemy.type}-chase`;
+
+            if (this.anims.exists(chaseAnim)) {
+                enemy.sprite.play(chaseAnim, true);
+                return;
+            }
         }
 
         if (!enemy.moving) {
@@ -331,7 +553,10 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
-        enemy.sprite.play(this.getEnemyDirectionAnim(enemy), true);
+        enemy.sprite.play(
+            this.getEnemyDirectionAnim(enemy),
+            true
+        );
     }
 
     getEnemyDirectionAnim(enemy) {
@@ -361,7 +586,18 @@ export class GameScene extends Phaser.Scene {
 
         return `${base}-chase`;
     }
+    playerDied() {
+        this.lives--;
 
+        if (this.lives <= 0) {
+            this.scene.start("SplashScene");
+            return;
+        }
+
+        this.time.delayedCall(1000, () => {
+            this.respawnPlayer();
+        });
+    }
     update(time, delta) {
         const dt = delta / 1000;
         this.hud.updateStats({
@@ -371,6 +607,20 @@ export class GameScene extends Phaser.Scene {
             health: this.health,
             ammo: this.ammo
         });
+
+        if (this.health != this.oldHealth && this.hud.face.anims.currentAnim) {
+            const groupIndex = Math.min(
+                5,
+                Math.floor((100 - this.health) / 17)
+            );
+            if (this.health === 0) {
+                this.hud.face.setFrame(25);
+            }
+            else {
+                this.hud.face.play("face_" + groupIndex, true);
+            }
+            this.oldHealth = this.health;
+        }
         this.checkPickups();
         if (Phaser.Input.Keyboard.JustDown(this.keys.m)) {
             this.minimapVisible = !this.minimapVisible;
@@ -378,6 +628,23 @@ export class GameScene extends Phaser.Scene {
         }
         if (Phaser.Input.Keyboard.JustDown(this.keys.fire)) {
             this.fireWeapon();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.one)) {
+            this.weapon = 0; // knife
+            this.hud.weaponIcon.setFrame(0);
+        }
+
+        if (Phaser.Input.Keyboard.JustDown(this.keys.two)) {
+            this.weapon = 1; // pistol
+            this.hud.weaponIcon.setFrame(1);
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.three)) {
+            this.weapon = 2; // machine gun
+            this.hud.weaponIcon.setFrame(2);
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.four)) {
+            this.weapon = 3; // gatling gun
+            this.hud.weaponIcon.setFrame(3);
         }
         this.movePlayer(dt);
         this.updateEnemies(dt);
@@ -522,15 +789,185 @@ export class GameScene extends Phaser.Scene {
 
     }
 
+    damageEnemy(enemy, damage) {
+        if (enemy.dead) return;
+
+        enemy.health ??= (
+            enemy.type === "dog" ? 40 :
+                enemy.type === "ss" ? 80 :
+                    60
+        );
+
+        enemy.health -= damage;
+
+        if (enemy.health <= 0) {
+            enemy.dead = true;
+            enemy.dying = true;
+
+            enemy.moving = false;
+            enemy.chasing = false;
+            enemy.shooting = false;
+
+            enemy.sprite.setVisible(true);
+            enemy.sprite.play(`${enemy.type}-die`);
+
+            enemy.sprite.once(
+                Phaser.Animations.Events.ANIMATION_COMPLETE,
+                () => {
+                    enemy.dying = false;
+                    enemy.sprite.setVisible(true);
+                    enemy.sprite.play(`${enemy.type}-dead`, true);
+                }
+            );
+
+            this.score += (
+                enemy.type === "dog" ? 200 :
+                    enemy.type === "ss" ? 500 :
+                        100
+            );
+        }
+    }
+    updateEnemyAI(enemy, dt) {
+        if (enemy.dead) return;
+
+        const dx = this.player.x - enemy.x;
+        const dy = this.player.y - enemy.y;
+        const dist = Math.hypot(dx, dy);
+
+        enemy.seesPlayer = this.enemyCanSeePlayer(enemy);
+
+        if (enemy.seesPlayer) {
+            enemy.direction = Math.atan2(dy, dx);
+
+            enemy.chasing = true;
+            enemy.moving = true;
+
+            const shootRange = enemy.type === "ss" ? 6 : 5;
+
+            if (dist <= shootRange && enemy.type !== "dog") {
+                enemy.chasing = true;
+                enemy.shooting = true;
+                this.enemyFireWeapon(enemy);
+            } else {
+                enemy.chasing = true;
+                enemy.shooting = false;
+            }
+            if (enemy.type === "dog" && dist <= 1.2) {
+                enemy.shooting = true;
+                this.enemyFireWeapon(enemy);
+            }
+        }
+    }
+    damageEnemy(enemy, damage) {
+        if (enemy.dead) return;
+
+        enemy.health ??= (
+            enemy.type === "dog" ? 40 :
+                enemy.type === "ss" ? 80 :
+                    60
+        );
+
+        enemy.health -= damage;
+
+        if (enemy.health <= 0) {
+
+            enemy.dead = true;
+            enemy.dying = true;
+
+            enemy.moving = false;
+            enemy.chasing = false;
+            enemy.shooting = false;
+
+            enemy.sprite.play(
+                `${enemy.type}-die`
+            );
+
+            enemy.sprite.once(
+                Phaser.Animations.Events.ANIMATION_COMPLETE,
+                () => {
+                    enemy.dying = false;
+                    enemy.sprite.play(
+                        `${enemy.type}-dead`
+                    );
+                }
+            );
+
+            return;
+        }
+    }
+
+    enemyCanSeePlayer(enemy) {
+        const dx = this.player.x - enemy.x;
+        const dy = this.player.y - enemy.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 8) return false;
+
+        const steps = Math.ceil(dist * 8);
+
+        for (let i = 1; i < steps; i++) {
+            const t = i / steps;
+
+            const x = enemy.x + dx * t;
+            const y = enemy.y + dy * t;
+
+            if (this.isBlocking(x, y)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    enemyFireWeapon(enemy) {
+        if (enemy.type === "dog") {
+            this.damagePlayer(8);
+            return;
+        }
+
+        const now = this.time.now;
+
+        if (!enemy.nextShotTime) {
+            enemy.nextShotTime = 0;
+        }
+
+        if (now < enemy.nextShotTime) {
+            return;
+        }
+
+        enemy.nextShotTime = now + 900;
+
+        enemy.shooting = true;
+        this.damagePlayer(enemy.type === "ss" ? 12 : 8);
+
+        this.time.delayedCall(180, () => {
+            enemy.shooting = false;
+        });
+    }
+    damagePlayer(amount) {
+        this.health = Phaser.Math.Clamp(
+            this.health - amount,
+            0,
+            100
+        );
+
+        if (this.health <= 0 && !this.playerDying) {
+            this.playerDying = true;
+            this.playerDied();
+        }
+
+    }
     updateEnemies(dt) {
         if (!this.enemies) return;
-
         for (const enemy of this.enemies) {
             if (enemy.dead) {
                 this.updateEnemyAnimation(enemy);
                 continue;
             }
-
+            this.updateEnemyAI(enemy, dt);
+            if (enemy.shooting) {
+                this.updateEnemyAnimation(enemy);
+                continue;
+            }
             if (!enemy.moving) {
                 enemy.moving = true;
             }
@@ -695,7 +1132,6 @@ export class GameScene extends Phaser.Scene {
         const cos = Math.cos(angle);
 
         let best = null;
-
         // --------------------------
         // Vertical grid intersections
         // --------------------------
@@ -730,6 +1166,11 @@ export class GameScene extends Phaser.Scene {
                 let tile = this.wallMap[my]?.[mx];
 
                 if (tile > 0) {
+                    if (tile > 0 && this.isAdjacentToSecretDoor(mx, my)) {
+                        x += dx;
+                        y += dy;
+                        continue;
+                    }
                     if (this.isDoorFrame(tile)) {
                         const door = this.getDoorAt(mx, my);
 
@@ -805,6 +1246,11 @@ export class GameScene extends Phaser.Scene {
                 const tile = this.wallMap[my]?.[mx];
 
                 if (tile > 0) {
+                    if (tile > 0 && this.isAdjacentToSecretDoor(mx, my)) {
+                        x += dx;
+                        y += dy;
+                        continue;
+                    }
                     if (this.isDoorFrame(tile)) {
                         const door = this.getDoorAt(mx, my);
 
@@ -1040,10 +1486,16 @@ export class GameScene extends Phaser.Scene {
         }
 
         const tile = this.wallMap[my][mx];
+
+        if (tile > 0 && this.isAdjacentToSecretDoor(mx, my)) {
+            return false;
+        }
+
         if (this.isDoorFrame(tile)) {
             const door = this.getDoorAt(mx, my);
             return !(door && door.amount >= 0.95);
         }
+
         if (tile === 0) {
             return false;
         }
