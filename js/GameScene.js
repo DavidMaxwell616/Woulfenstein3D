@@ -1,4 +1,4 @@
-import { H, W, pickupData } from "./config.js";
+import { H, W, pickupData, weapons, weaponPickupData } from "./config.js";
 import { HUD } from "./Hud.js";
 
 export class GameScene extends Phaser.Scene {
@@ -49,17 +49,18 @@ export class GameScene extends Phaser.Scene {
     }
 
     create() {
-        this.wallData = this.cache.json.get("wallData");
-        this.objectData = this.cache.json.get("objectData");
-        this.wallMap = this.wallData.wall_levels[0].level_1_wall_map;
-        this.objectMap = this.objectData.object_levels[0].level_1_object_map;
-        this.wallMap = this.wallMap.map(row =>
-            row.map(cell => cell === 106 ? 0 : cell)
-        );
         const data = this.scene.settings.data || {};
         this.level = data.level ?? 1;
         this.score = data.score ?? 0;
         this.lives = data.lives ?? 3;
+
+        this.wallData = this.cache.json.get("wallData");
+        this.objectData = this.cache.json.get("objectData");
+        this.wallMap = this.wallData.wall_levels[this.level - 1];
+        this.objectMap = this.objectData.object_levels[this.level - 1];
+        this.wallMap = this.wallMap.map(row =>
+            row.map(cell => cell === 106 ? 0 : cell)
+        );
         this.playerDying = false;
         this.health = 100;
         this.ammo = 50;
@@ -67,6 +68,7 @@ export class GameScene extends Phaser.Scene {
         this.oldHealth = 100;
         this.ammo = 50;
         this.hud = new HUD(this);
+        this.guardsAreOblivious = true;
         this.mapW = this.wallMap[0].length;
         this.mapH = this.wallMap.length;
         this.createEnemyAnimations();
@@ -80,6 +82,7 @@ export class GameScene extends Phaser.Scene {
         this.DOOR_OPEN_TIME = 5000;
         this.DOOR_MIN = 89;
         this.DOOR_MAX = 101;
+        this.nextFireTime = 0;
         // ceiling / floor background
         this.worldGfx = this.add.graphics();
         this.worldGfx.setDepth(0);
@@ -87,7 +90,12 @@ export class GameScene extends Phaser.Scene {
             .setOrigin(0.5, 0.5)
             .setDepth(1000001)
             .setScale(5);
-
+        this.ownedWeapons = {
+            0: true,   // knife always owned
+            1: false,  // pistol
+            2: false,  // machine gun
+            3: false   // gatling gun
+        };
         if (!this.anims.exists("knife")) {
             this.anims.create({
                 key: "knife",
@@ -117,8 +125,8 @@ export class GameScene extends Phaser.Scene {
                     start: 10,
                     end: 14
                 }),
-                frameRate: 10,
-                repeat: 0
+                frameRate: 24,
+                repeat: -1
             });
         }
 
@@ -129,61 +137,27 @@ export class GameScene extends Phaser.Scene {
                     start: 15,
                     end: 19
                 }),
-                frameRate: 10,
-                repeat: 0
+                frameRate: 32,
+                repeat: -1
             });
         }
+        if (!this.gameObjectsAlreadySetup) {
+            this.weapon = 0;
+            this.wallCanvas = this.textures.createCanvas("wallScreen", W, H);
+            this.wallCtx = this.wallCanvas.getContext();
+            this.wallScreen = this.add.image(0, 0, "wallScreen")
+                .setOrigin(0, 0)
+                .setDepth(1);
+            this.wallsImage = this.textures.get("walls").getSourceImage();
+            // enemies render above walls
+            this.spriteLayer = this.add.container(0, 0);
+            this.spriteLayer.setDepth(10);
 
-        this.weapon = 0;
-
-        this.weapons = {
-            0: {
-                name: "Knife",
-                animation: "knife",
-                range: 1.25,
-                damage: 35,
-                ammo: false
-            },
-
-            1: {
-                name: "Pistol",
-                animation: "pistol",
-                damage: 25,
-                ammo: true
-            },
-            2: {
-                name: "Machine Gun",
-                animation: "machine_gun",
-                range: 18,
-                damage: 50,
-                ammo: true
-            },
-            3: {
-                name: "Gatling Gun",
-                animation: "gatling_gun",
-                range: 28,
-                damage: 100,
-                ammo: true
-            }
-        };
-
-        this.wallCanvas = this.textures.createCanvas("wallScreen", W, H);
-        this.wallCtx = this.wallCanvas.getContext();
-
-        this.wallScreen = this.add.image(0, 0, "wallScreen")
-            .setOrigin(0, 0)
-            .setDepth(1);
-
-        this.wallsImage = this.textures.get("walls").getSourceImage();
-
-        // enemies render above walls
-        this.spriteLayer = this.add.container(0, 0);
-        this.spriteLayer.setDepth(10);
-
-        this.mapGfx = this.add.graphics();
-        this.mapGfx.setDepth(9999);
-        this.minimapVisible = true;
-
+            this.mapGfx = this.add.graphics();
+            this.mapGfx.setDepth(9999);
+            this.minimapVisible = true;
+            this.gameObjectsAlreadySetup = true;
+        }
         this.keys.m = this.input.keyboard.addKey(
             Phaser.Input.Keyboard.KeyCodes.M
         );
@@ -212,14 +186,6 @@ export class GameScene extends Phaser.Scene {
         return this.objectMap[my]?.[mx] === 98;
     }
 
-    isAdjacentToSecretDoor(mx, my) {
-        return (
-            this.isSecretDoorMarker(mx + 1, my) ||
-            this.isSecretDoorMarker(mx - 1, my) ||
-            this.isSecretDoorMarker(mx, my + 1) ||
-            this.isSecretDoorMarker(mx, my - 1)
-        );
-    }
     respawnPlayer() {
         this.health = 100;
         this.playerDying = false;
@@ -255,11 +221,23 @@ export class GameScene extends Phaser.Scene {
     }
 
     fireWeapon() {
-        const weapon = this.weapons[this.weapon];
-        this.weaponSprite.play(weapon.animation);
-
+        const weapon = weapons[this.weapon];
         if (weapon.ammo && this.ammo <= 0) {
             return;
+        }
+
+        if (
+            this.weapon <= 1 &&
+            this.time.now < this.nextFireTime
+        ) {
+            return;
+        }
+
+        this.nextFireTime =
+            this.time.now + weapon.fireDelay;
+
+        if (!this.weaponSprite.anims.isPlaying) {
+            this.weaponSprite.play(weapon.animation);
         }
 
         if (weapon.ammo) {
@@ -353,18 +331,25 @@ export class GameScene extends Phaser.Scene {
                         this.startRot = this.player.rot;
                     }
                     else if (obj >= 23 && obj <= 56) {
-                        obj -= 21;
+                        const objectCode = obj;   // original object-map value
+                        const frame = obj - 21;   // sprite frame only
+
                         this.objects.push({
                             x: x + 0.5,
                             y: y + 0.5,
                             tileX: x,
                             tileY: y,
-                            objectCode: obj,
-                            frame: obj,
-                            pickup: pickupData[obj] || null,
+
+                            objectCode,
+                            frame,
+
+                            pickup: pickupData[objectCode] || null,
+                            weaponPickup: weaponPickupData[objectCode] ?? null,
+
                             pickedUp: false,
-                            sprite: this.add.sprite(0, 0, "objects", obj)
-                                .setOrigin(0.5, 0.5)
+
+                            sprite: this.add.sprite(0, 0, "objects", frame)
+                                .setOrigin(0.5)
                                 .setVisible(false)
                                 .setDepth(20)
                         });
@@ -397,16 +382,14 @@ export class GameScene extends Phaser.Scene {
         ];
     }
     setWeapon(weaponIndex) {
-        this.weapon = weaponIndex;
+        if (!this.ownedWeapons[weaponIndex]) {
+            return;
+        }
 
+        this.weapon = weaponIndex;
         this.hud.weaponIcon.setFrame(weaponIndex);
 
-        const idleFrames = [
-            0,   // knife
-            5,   // pistol
-            10,  // machine gun
-            15   // gatling gun
-        ];
+        const idleFrames = [0, 5, 10, 15];
 
         this.weaponSprite.stop();
         this.weaponSprite.setFrame(idleFrames[weaponIndex]);
@@ -572,7 +555,64 @@ export class GameScene extends Phaser.Scene {
             true
         );
     }
+    advanceLevel() {
+        this.scene.start("TweenScene", {
+            nextLevel: this.level + 1,
+            score: this.score,
+            lives: this.lives
+        });
+    }
+    isOnElevator() {
+        const mx = Math.floor(this.player.x);
+        const my = Math.floor(this.player.y);
 
+        return this.wallMap[my]?.[mx] === 100;
+    }
+    startElevatorSequence() {
+
+        this.player.moveSpeed = 0;
+
+        const doorLeft = this.add.rectangle(
+            0,
+            0,
+            W / 2,
+            H,
+            0x000000
+        ).setOrigin(0, 0)
+            .setDepth(2000000);
+
+        const doorRight = this.add.rectangle(
+            W,
+            0,
+            W / 2,
+            H,
+            0x000000
+        ).setOrigin(1, 0)
+            .setDepth(2000000);
+
+        this.tweens.add({
+            targets: doorLeft,
+            x: W / 2,
+            duration: 700
+        });
+
+        this.tweens.add({
+            targets: doorRight,
+            x: W / 2,
+            duration: 700,
+
+            onComplete: () => {
+
+                // elevator doors fully shut here
+
+                this.scene.start("TweenScene", {
+                    nextLevel: this.level + 1,
+                    score: this.score,
+                    lives: this.lives
+                });
+            }
+        });
+    }
     getEnemyDirectionAnim(enemy) {
         const base = enemy.type;
 
@@ -640,8 +680,32 @@ export class GameScene extends Phaser.Scene {
             this.minimapVisible = !this.minimapVisible;
             this.mapGfx.setVisible(this.minimapVisible);
         }
-        if (Phaser.Input.Keyboard.JustDown(this.keys.fire)) {
-            this.fireWeapon();
+        if (
+            this.isOnElevator() &&
+            !this.enteringElevator
+        ) {
+            this.enteringElevator = true;
+            this.startElevatorSequence();
+        }
+
+        const weapon = weapons[this.weapon];
+
+        if (this.weapon <= 1) {
+            // knife + pistol
+            if (Phaser.Input.Keyboard.JustDown(this.keys.fire)) {
+                this.fireWeapon();
+            }
+        }
+        else {
+            // machine gun + gatling
+            if (
+                this.keys.fire.isDown &&
+                this.time.now >= this.nextFireTime
+            ) {
+                this.fireWeapon();
+                this.nextFireTime =
+                    this.time.now + weapon.fireDelay;
+            }
         }
         if (Phaser.Input.Keyboard.JustDown(this.keys.one)) {
             this.setWeapon(0);
@@ -732,20 +796,54 @@ export class GameScene extends Phaser.Scene {
         const py = Math.floor(this.player.y);
 
         for (const obj of this.objects) {
+
             if (
                 obj.pickedUp ||
-                !obj.pickup ||
                 obj.tileX !== px ||
                 obj.tileY !== py
             ) {
                 continue;
             }
 
+            // -------------------------
+            // Weapon pickups
+            // -------------------------
+            if (obj.weaponPickup !== null) {
+
+                this.ownedWeapons[obj.weaponPickup] = true;
+
+                this.setWeapon(obj.weaponPickup);
+
+                obj.pickedUp = true;
+
+                obj.sprite.destroy();
+
+                this.objectMap[obj.tileY][obj.tileX] = 0;
+
+                continue;
+            }
+
+            // -------------------------
+            // Normal pickups
+            // -------------------------
+            if (!obj.pickup) {
+                continue;
+            }
+
+            // Don't pick up health if already full
+            if (
+                obj.pickup.health &&
+                this.health >= 100
+            ) {
+                continue;
+            }
+
             obj.pickedUp = true;
-            obj.sprite.setVisible(false);
+
             obj.sprite.destroy();
 
             this.score += obj.pickup.score || 0;
+
             this.health = Phaser.Math.Clamp(
                 this.health + (obj.pickup.health || 0),
                 0,
@@ -755,8 +853,11 @@ export class GameScene extends Phaser.Scene {
             this.objectMap[obj.tileY][obj.tileX] = 0;
         }
 
-        this.objects = this.objects.filter(obj => !obj.pickedUp);
+        this.objects = this.objects.filter(
+            obj => !obj.pickedUp
+        );
     }
+
     movePlayer(dt) {
         if (this.keys.left.isDown) {
             this.player.rot -= this.player.rotSpeed * dt;
@@ -847,7 +948,7 @@ export class GameScene extends Phaser.Scene {
         const dist = Math.hypot(dx, dy);
 
         enemy.seesPlayer = this.enemyCanSeePlayer(enemy);
-
+        enemy.seesPlayer = !this.guardsAreOblivious;
         if (enemy.seesPlayer) {
             enemy.direction = Math.atan2(dy, dx);
 
@@ -1048,9 +1149,11 @@ export class GameScene extends Phaser.Scene {
         const g = this.worldGfx;
         g.clear();
 
+        //ceiling color = eclipse
         g.fillStyle(0x383838);
         g.fillRect(0, 0, W, H / 2);
 
+        //floor color = dim gray
         g.fillStyle(0x707070);
         g.fillRect(0, H / 2, W, H / 2);
 
@@ -1084,11 +1187,19 @@ export class GameScene extends Phaser.Scene {
             const wallH = this.viewDist / dist;
             const top = Math.floor((H - wallH) / 2);
 
-            let frameIndex = Math.max(0, hit.wall - 1);
+            let frameIndex;
 
-            //doors
-            if (this.isDoorFrame(frameIndex)) {
-                frameIndex -= 61;
+            if (hit.wall === 100) {
+                // elevator door
+                frameIndex = 12;
+            }
+            else if (this.isDoorFrame(hit.wall)) {
+                // regular doors
+                frameIndex = hit.wall - 61;
+            }
+            else {
+                // normal walls
+                frameIndex = hit.wall - 1;
             }
 
             const frame = this.textures.getFrame("walls", frameIndex);
@@ -1176,13 +1287,7 @@ export class GameScene extends Phaser.Scene {
                 const my = Math.floor(y);
 
                 let tile = this.wallMap[my]?.[mx];
-
                 if (tile > 0) {
-                    if (tile > 0 && this.isAdjacentToSecretDoor(mx, my)) {
-                        x += dx;
-                        y += dy;
-                        continue;
-                    }
                     if (this.isDoorFrame(tile)) {
                         const door = this.getDoorAt(mx, my);
 
@@ -1258,11 +1363,6 @@ export class GameScene extends Phaser.Scene {
                 const tile = this.wallMap[my]?.[mx];
 
                 if (tile > 0) {
-                    if (tile > 0 && this.isAdjacentToSecretDoor(mx, my)) {
-                        x += dx;
-                        y += dy;
-                        continue;
-                    }
                     if (this.isDoorFrame(tile)) {
                         const door = this.getDoorAt(mx, my);
 
@@ -1499,7 +1599,7 @@ export class GameScene extends Phaser.Scene {
 
         const tile = this.wallMap[my][mx];
 
-        if (tile > 0 && this.isAdjacentToSecretDoor(mx, my)) {
+        if (tile > 0 && this.isSecretDoorMarker(mx, my)) {
             return false;
         }
 
