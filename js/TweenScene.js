@@ -1,4 +1,5 @@
-// TweenScene.js
+import { H, W, } from "./config.js";
+
 export class TweenScene extends Phaser.Scene {
     constructor() {
         super("TweenScene");
@@ -10,11 +11,37 @@ export class TweenScene extends Phaser.Scene {
         this.lives = data.lives ?? 3;
     }
 
+    preload() {
+        this.load.spritesheet("blazTween", "assets/images/blazTween.png", {
+            frameWidth: 81,
+            frameHeight: 87
+        });
+    }
+
     create() {
         const w = this.scale.width;
         const h = this.scale.height;
 
         this.cameras.main.setBackgroundColor("#000000");
+
+        this.blazTween = this.add.sprite(W / 2, H * .57, "blazTween", 1)
+            .setOrigin(0.5, 0.5)
+            .setDepth(1000001)
+            .setScale(5);
+
+
+        if (!this.anims.exists("blazTween")) {
+            this.anims.create({
+                key: "blazTween",
+                frames: this.anims.generateFrameNumbers("blazTween", {
+                    start: 0,
+                    end: 2
+                }),
+                frameRate: 10,
+                repeat: 0
+            });
+        }
+        this.blazTween.play("blazTween");
 
         const doorLeft = this.add.rectangle(
             0,
@@ -59,7 +86,7 @@ export class TweenScene extends Phaser.Scene {
             duration: 700,
             ease: "Linear",
             onComplete: () => {
-                this.time.delayedCall(800, () => {
+                this.time.delayedCall(5000, () => {
                     this.scene.start("GameScene", {
                         level: this.nextLevel,
                         score: this.score,

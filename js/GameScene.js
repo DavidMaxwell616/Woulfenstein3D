@@ -56,11 +56,19 @@ export class GameScene extends Phaser.Scene {
 
         this.wallData = this.cache.json.get("wallData");
         this.objectData = this.cache.json.get("objectData");
-        this.wallMap = this.wallData.wall_levels[this.level - 1];
-        this.objectMap = this.objectData.object_levels[this.level - 1];
+
+        const levelIndex = this.level - 1;
+        this.enteringElevator = false;
+        this.wallMap =
+            this.wallData.wall_levels[levelIndex];
+
+        this.objectMap =
+            this.objectData.object_levels[levelIndex];
+
         this.wallMap = this.wallMap.map(row =>
             row.map(cell => cell === 106 ? 0 : cell)
         );
+
         this.playerDying = false;
         this.health = 100;
         this.ammo = 50;
@@ -69,9 +77,9 @@ export class GameScene extends Phaser.Scene {
         this.ammo = 50;
         this.hud = new HUD(this);
         this.guardsAreOblivious = true;
+        this.createEnemyAnimations();
         this.mapW = this.wallMap[0].length;
         this.mapH = this.wallMap.length;
-        this.createEnemyAnimations();
         this.setupObjects();
         this.fov = Phaser.Math.DegToRad(60);
         this.numRays = 320;
@@ -141,23 +149,29 @@ export class GameScene extends Phaser.Scene {
                 repeat: -1
             });
         }
-        if (!this.gameObjectsAlreadySetup) {
-            this.weapon = 0;
-            this.wallCanvas = this.textures.createCanvas("wallScreen", W, H);
-            this.wallCtx = this.wallCanvas.getContext();
-            this.wallScreen = this.add.image(0, 0, "wallScreen")
-                .setOrigin(0, 0)
-                .setDepth(1);
-            this.wallsImage = this.textures.get("walls").getSourceImage();
-            // enemies render above walls
-            this.spriteLayer = this.add.container(0, 0);
-            this.spriteLayer.setDepth(10);
+        this.weapon = 0;
 
-            this.mapGfx = this.add.graphics();
-            this.mapGfx.setDepth(9999);
-            this.minimapVisible = true;
-            this.gameObjectsAlreadySetup = true;
+
+        if (this.textures.exists("wallScreen")) {
+            this.textures.remove("wallScreen");
         }
+
+        this.wallCanvas = this.textures.createCanvas("wallScreen", W, H);
+        this.wallCtx = this.wallCanvas.getContext();
+
+        this.wallScreen = this.add.image(0, 0, "wallScreen")
+            .setOrigin(0, 0)
+            .setDepth(1);
+
+        this.wallsImage = this.textures.get("walls").getSourceImage();
+        // enemies render above walls
+        this.spriteLayer = this.add.container(0, 0);
+        this.spriteLayer.setDepth(10);
+
+        this.mapGfx = this.add.graphics();
+        this.mapGfx.setDepth(9999);
+        this.minimapVisible = true;
+
         this.keys.m = this.input.keyboard.addKey(
             Phaser.Input.Keyboard.KeyCodes.M
         );
@@ -181,7 +195,6 @@ export class GameScene extends Phaser.Scene {
         );
         this.depthBuffer = [];
     }
-
     isSecretDoorMarker(mx, my) {
         return this.objectMap[my]?.[mx] === 98;
     }
@@ -565,11 +578,9 @@ export class GameScene extends Phaser.Scene {
     isOnElevator() {
         const mx = Math.floor(this.player.x);
         const my = Math.floor(this.player.y);
-
         return this.wallMap[my]?.[mx] === 100;
     }
     startElevatorSequence() {
-
         this.player.moveSpeed = 0;
 
         const doorLeft = this.add.rectangle(
@@ -602,9 +613,6 @@ export class GameScene extends Phaser.Scene {
             duration: 700,
 
             onComplete: () => {
-
-                // elevator doors fully shut here
-
                 this.scene.start("TweenScene", {
                     nextLevel: this.level + 1,
                     score: this.score,
@@ -1195,7 +1203,7 @@ export class GameScene extends Phaser.Scene {
             }
             else if (this.isDoorFrame(hit.wall)) {
                 // regular doors
-                frameIndex = hit.wall - 61;
+                frameIndex = hit.wall - 62;
             }
             else {
                 // normal walls
