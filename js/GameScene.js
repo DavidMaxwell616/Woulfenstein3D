@@ -58,7 +58,9 @@ export class GameScene extends Phaser.Scene {
         this.objectData = this.cache.json.get("objectData");
 
         const levelIndex = this.level - 1;
+
         this.enteringElevator = false;
+
         this.wallMap =
             this.wallData.wall_levels[levelIndex];
 
