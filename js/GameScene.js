@@ -615,7 +615,13 @@ export class GameScene extends Phaser.Scene {
         if (!enemy.moving) {
             enemy.sprite.stop();
 
-            this.getEnemyPerspectiveFrame(enemy)
+            if (enemy.type === "guard" || enemy.type === "ss") {
+                enemy.sprite.setFrame(
+                    this.getEnemyPerspectiveFrame(enemy)
+                );
+            } else if (enemy.type === "dog") {
+                this.getEnemyPerspectiveFrame(enemy)
+            }
 
             return;
         }
