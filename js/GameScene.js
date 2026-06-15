@@ -77,7 +77,7 @@ export class GameScene extends Phaser.Scene {
         this.oldHealth = 100;
         this.hud = new HUD(this);
 
-        this.enemiesAreOblivious = true;
+        this.enemiesAreOblivious = false;
         this.enemiesDontMove = false;
 
         this.createEnemyAnimations();
@@ -97,7 +97,7 @@ export class GameScene extends Phaser.Scene {
         // ceiling / floor background
         this.worldGfx = this.add.graphics();
         this.worldGfx.setDepth(0);
-        this.weaponSprite = this.add.sprite(W / 2, H * .57, "weapon", 1)
+        this.weaponSprite = this.add.sprite(W / 2, H * .58, "weapon", 1)
             .setOrigin(0.5, 0.5)
             .setDepth(1000001)
             .setScale(5);
@@ -246,7 +246,38 @@ export class GameScene extends Phaser.Scene {
 
         return true;
     }
+    enemyHasLineOfSight(x1, y1, x2, y2) {
 
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+
+        const dist = Math.hypot(dx, dy);
+
+        const steps = Math.ceil(dist * 8);
+
+        for (let i = 1; i < steps; i++) {
+
+            const t = i / steps;
+
+            const x = x1 + dx * t;
+            const y = y1 + dy * t;
+
+            const mx = Math.floor(x);
+            const my = Math.floor(y);
+
+            const tile =
+                this.wallMap[my]?.[mx];
+
+            if (
+                tile > 0 &&
+                !this.isSecretDoorMarker(mx, my)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     fireWeapon() {
         const weapon = weapons[this.weapon];
         if (weapon.ammo && this.ammo <= 0) {
@@ -337,9 +368,9 @@ export class GameScene extends Phaser.Scene {
                 if (obj > 0) {
                     if (obj >= 19 && obj <= 22) {
                         this.player = {
-                            x: 42,//x,
-                            y: 34, //y,
-                            rot: obj - 19 * 90 - 2950,
+                            x: x,
+                            y: y,
+                            rot: obj - 19 * 90,
                             moveSpeed: 3.2,
                             rotSpeed: 2.2
                         };
@@ -826,6 +857,24 @@ export class GameScene extends Phaser.Scene {
                     this.time.now + weapon.fireDelay;
             }
         }
+
+        if (
+            (this.weapon === 2 || this.weapon === 3) &&
+            Phaser.Input.Keyboard.JustUp(this.keys.fire)
+        ) {
+            this.weaponSprite.stop();
+            const idleFrames = [
+                0,   // knife
+                5,   // pistol
+                10,  // machine gun
+                15   // gatling gun
+            ];
+
+            this.weaponSprite.setFrame(
+                idleFrames[this.weapon]
+            );
+        }
+
         if (Phaser.Input.Keyboard.JustDown(this.keys.one)) {
             this.setWeapon(0);
         }
@@ -847,6 +896,45 @@ export class GameScene extends Phaser.Scene {
         this.renderSprites();
         this.renderMiniMap();
     }
+
+    openDoor(door) {
+        if (!door || door.open || door.closing) {
+            return;
+        }
+
+        door.open = true;
+
+        door.tween = this.tweens.add({
+            targets: door,
+            amount: 1,
+            duration: 350,
+            ease: "Linear",
+
+            onComplete: () => {
+
+                this.time.delayedCall(
+                    this.DOOR_OPEN_TIME,
+                    () => {
+
+                        door.closing = true;
+
+                        door.tween = this.tweens.add({
+                            targets: door,
+                            amount: 0,
+                            duration: 350,
+                            ease: "Linear",
+
+                            onComplete: () => {
+                                door.open = false;
+                                door.closing = false;
+                            }
+                        });
+                    }
+                );
+            }
+        });
+    }
+
     getDoorKey(x, y) {
         return `${x},${y}`;
     }
@@ -1129,27 +1217,33 @@ export class GameScene extends Phaser.Scene {
     }
 
     enemyCanSeePlayer(enemy) {
+
         const dx = this.player.x - enemy.x;
         const dy = this.player.y - enemy.y;
+
         const dist = Math.hypot(dx, dy);
 
-        if (dist > 8) return false;
-
-        const steps = Math.ceil(dist * 8);
-
-        for (let i = 1; i < steps; i++) {
-            const t = i / steps;
-
-            const x = enemy.x + dx * t;
-            const y = enemy.y + dy * t;
-
-            if (this.isBlocking(x, y)) {
-                return false;
-            }
+        if (dist > 12) {
+            return false;
         }
 
-        return true;
+        // must be facing player
+        const dot =
+            enemy.dirX * (dx / dist) +
+            enemy.dirY * (dy / dist);
+
+        if (dot < 0.5) {
+            return false;
+        }
+
+        return this.enemyHasLineOfSight(
+            enemy.x,
+            enemy.y,
+            this.player.x,
+            this.player.y
+        );
     }
+
     enemyFireWeapon(enemy) {
         if (enemy.type === "dog") {
             this.damagePlayer(8);
@@ -1256,6 +1350,23 @@ export class GameScene extends Phaser.Scene {
 
             const nextX = enemy.x + enemy.dirX * speed;
             const nextY = enemy.y + enemy.dirY * speed;
+            const mx = Math.floor(nextX);
+            const my = Math.floor(nextY);
+
+            const door = this.getDoorAt(mx, my);
+
+            if (
+                door &&
+                (enemy.type === "guard" || enemy.type === "ss")
+            ) {
+                this.openDoor(door);
+
+                // wait for door
+                enemy.moving = false;
+                this.updateEnemyAnimation(enemy);
+
+                continue;
+            }
 
             if (this.isBlocking(nextX, nextY)) {
                 enemy.dirX *= -1;

@@ -22,8 +22,8 @@ export class HUD {
         this.floorText = scene.add.text(-230, textY, this.stats.floor, this.textStyle());
         this.scoreText = scene.add.text(-160, textY, this.stats.score, this.textStyle());
         this.livesText = scene.add.text(-80, textY, this.stats.lives, this.textStyle());
-        this.healthText = scene.add.text(10, textY, this.stats.health, this.textStyle());
-        this.ammoText = scene.add.text(80, textY, this.stats.ammo, this.textStyle());
+        this.healthText = scene.add.text(15, textY, this.stats.health, this.textStyle());
+        this.ammoText = scene.add.text(90, textY, this.stats.ammo, this.textStyle());
         this.face = scene.add.sprite(-20, 0, "face")
             .setOrigin(0.5)
             .setScale(scale);
@@ -66,7 +66,7 @@ export class HUD {
     textStyle() {
         return {
             fontFamily: "Courier New",
-            fontSize: "32px",
+            fontSize: "24px",
             fontStyle: "bold",
             color: "#939CFE"
         };
