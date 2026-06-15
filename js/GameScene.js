@@ -381,6 +381,27 @@ export class GameScene extends Phaser.Scene {
                             )
                         });
                     }
+                    else if (obj === 124) {
+                        this.objects.push({
+                            x: x + 0.5,
+                            y: y + 0.5,
+                            tileX: x,
+                            tileY: y,
+
+                            obj,
+                            frame: 0,
+
+                            pickup: null,
+                            weaponPickup: null,
+
+                            pickedUp: false,
+
+                            sprite: this.add.sprite(0, 0, "objects", this.frame)
+                                .setOrigin(0.5)
+                                .setVisible(false)
+                                .setDepth(20)
+                        });
+                    }
                     else if (obj >= 108 && obj <= 115) {
                         this.guards.push(this.createEnemy(x, y, obj, 108, 112, "guard"));
                     }
